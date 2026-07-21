@@ -80,21 +80,24 @@ a[href^="http"]:hover {
 }
 a.ext::after,
 a[href^="http"]::after {
-  content: "\2197";            /* ↗ leaves-the-site marker */
-  font-size: 0.7em;
-  vertical-align: 0.28em;
-  margin-left: 0.12em;
-  color: var(--muted);
+  content: "";                 /* ↗ leaves-the-site marker */
+  display: inline-block;
+  width: 0.55em; height: 0.55em;
+  vertical-align: middle;
+  margin-left: 0.14em;
+  background-image: url(icons/arrow-ne.svg);
 }
 
 /* internal cross-references: marked with a small ※, the site's own reference
    mark, so they read differently from the ↗ that leaves the site. sits on the
    baseline, not raised. */
 a.int::after {
-  content: "\203B";            /* ※ stays-on-the-site marker */
-  font-size: 0.7em;
-  margin-left: 0.18em;
-  color: var(--muted);
+  content: "";                 /* ※ stays-on-the-site marker */
+  display: inline-block;
+  width: 0.55em; height: 0.55em;
+  margin-left: 0.14em;
+  vertical-align: middle;
+  background-image: url(icons/ref.svg);
 }
 
 /* withheld references: the moonshot operating-system documentation is written
@@ -108,17 +111,64 @@ a.int::after {
   border-bottom: 1px dotted var(--rule);
 }
 .wip::after {
-  content: "\26A0\FE0E";       /* ⚠ withheld / not-yet-published marker */
-  font-size: 0.7em;
-  vertical-align: 0.28em;
-  margin-left: 0.18em;
-  color: var(--muted);
+  content: "";                 /* ⚠ withheld / not-yet-published marker */
+  display: inline-block;
+  height: 0.58em; width: auto;
+  aspect-ratio: 886 / 767;
+  vertical-align: middle;
+  margin-left: 0.16em;
+  background-image: url(icons/warn.svg);
 }
 
 h1, h2, h3 { font-weight: 400; line-height: 1.2; }
 
-.mark  { color: var(--logo); }   /* the ※ logo: the one coloured element */
 .muted { color: var(--muted); }
+
+/* -------------------------------------------------------- symbol icons ---
+   the site's marks (※ ✹ ⚒ ✎ ↓ ● ◆ ↗ ⚠) are saved under icons/ as SVGs drawn
+   from real glyph outlines, and shown as background images so they render for
+   every visitor regardless of which fonts they have, and keep working when the
+   page is opened straight over file:// (a CSS mask would not: masks are same
+   origin only, and file:// treats every asset as a foreign origin). the one
+   colour each mark carries is baked into its file, since the site is a single
+   forced-dark theme. */
+.mark, .rule,
+ul.entries .glyph, ul.categories .cat-icon, .ico,
+a.int::after, a.ext::after, a[href^="http"]::after, .wip::after {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* the ※ logo: the one coloured mark */
+.mark {
+  display: inline-block;
+  width: 1em; height: 1em;
+  background-image: url(icons/mark.svg);
+}
+
+/* background image for each mark, shared by the category list, the newest list
+   and the inline mentions in running text. the category-set marks (tech / blog /
+   arrow-dn / disc / diamond) are drawn inside a shared SQUARE window, so in the
+   square boxes below they share one footprint and the category labels align in a
+   column; each glyph then sits at its own natural size within that square. the
+   inline-marker marks (ext / ref / warn) stay tight, so warn keeps its own
+   aspect-ratio and ext / ref are square. */
+.ico-tech    { background-image: url(icons/tech.svg); }
+.ico-blog    { background-image: url(icons/blog.svg); }
+.ico-dn      { background-image: url(icons/arrow-dn.svg); }
+.ico-disc    { background-image: url(icons/disc.svg); }
+.ico-diamond { background-image: url(icons/diamond.svg); }
+.ico-ext     { background-image: url(icons/arrow-ne.svg); aspect-ratio: 1; }
+.ico-ref     { background-image: url(icons/ref.svg);      aspect-ratio: 1; }
+.ico-warn    { background-image: url(icons/warn.svg);     aspect-ratio: 886 / 767; }
+
+/* an inline mark set in running text (e.g. the meta page's key to the marks) */
+.ico {
+  display: inline-block;
+  height: 0.8em; width: auto;
+  vertical-align: middle;
+}
 
 /* ------------------------------------------------------------- header --- */
 
@@ -136,12 +186,8 @@ main,
   letter-spacing: -0.01em;
   margin: 0 0 0.35rem;
 }
-/* the ※ glyph sits optically high in its em box; nudge it down so the mark and
-   the word share a true vertical centre. */
-.site-title .mark {
-  line-height: 1;
-  transform: translateY(0.07em);
-}
+/* the mark box is geometrically centred by the flex row, so no optical nudge */
+.site-title .mark { width: 0.62em; height: 0.62em; }
 
 .tagline {
   margin: 0;
@@ -175,15 +221,12 @@ h2 {
 .about p:last-child { margin-bottom: 0; }
 .about strong { font-weight: 700; }
 
-/* asterism separators: set in the logo colour, like the ※ mark */
+/* asterism separators: the ✹ star, set in the logo colour like the ※ mark */
 .rule {
-  text-align: center;
-  color: var(--logo);
-  font-size: 2rem;
-  line-height: 1;
-  letter-spacing: 0.4em;
-  margin: 3rem 0;
-  user-select: none;
+  display: block;
+  width: 1.4rem; height: 1.4rem;
+  margin: 3rem auto;
+  background-image: url(icons/star.svg);
   opacity: 0.85;
 }
 
@@ -215,20 +258,22 @@ ul.categories li {
   line-height: 1.4;
 }
 
-ul.entries .glyph { color: var(--muted); margin-right: 0.5ch; }
+ul.entries .glyph {
+  display: inline-block;
+  width: 0.95em; height: 0.95em;
+  margin-right: 0.5ch;
+  vertical-align: middle;
+}
 
 /* each category carries its own icon */
 ul.categories li {
   display: flex;
-  align-items: baseline;
-  gap: 0.6ch;
+  align-items: center;
+  gap: 0.7ch;
 }
 ul.categories .cat-icon {
   flex: none;
-  width: 1.3em;
-  text-align: center;
-  color: var(--ink-soft);
-  font-size: 0.95em;
+  width: 0.9em; height: 0.9em;
 }
 /* category names carry the same link styling as the newest list beside them:
    the base accent colour and persistent underline, no special casing. */
@@ -253,10 +298,8 @@ ul.categories .gloss {
   margin: 0;
 }
 .site-foot .foot-logo {
-  font-size: 1.6rem;
-  line-height: 1;
-  /* the ※ glyph rides high in its box; drop it so it lines up with the rules. */
-  transform: translateY(0.16em);
+  /* sized in rem here rather than em, since it has no surrounding text */
+  width: 0.98rem; height: 0.98rem;
 }
 
 /* ---------------------------------------------- sub-page header + nav --- */
@@ -275,13 +318,8 @@ ul.categories .gloss {
   font-size: 1.5rem;
   border-bottom: 0;
 }
-/* the ※ glyph rides optically high in its em box; drop it so the mark and the
-   word share a true vertical centre, matching the home-page title. */
-.brand .mark {
-  color: var(--logo);
-  line-height: 1;
-  transform: translateY(0.06em);
-}
+/* the brand mark is centred by the inline-flex row, matching the home title */
+.brand .mark { width: 0.62em; height: 0.62em; }
 .brand:hover { color: var(--ink); }
 
 nav.cats {

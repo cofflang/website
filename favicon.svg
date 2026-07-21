@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="-39.0 -611.0 660 660">
   <style>
-    /* the ※ mark alone, no background: black in light tabs, and only when the
-       browser itself is dark, light, so the mark never disappears. */
-    text { fill: #000000; }
-    @media (prefers-color-scheme: dark) { text { fill: #e6e6e6; } }
+    /* the mark alone, no ground: dark in light tabs, light in dark tabs,
+       so it never disappears. drawn from the real glyph outline, so it does
+       not depend on the tab having a font that covers the mark. */
+    path { fill: #000000; }
+    @media (prefers-color-scheme: dark) { path { fill: #e6e6e6; } }
   </style>
-  <text x="32" y="34" font-size="58" text-anchor="middle" dominant-baseline="central"
-        font-family="Georgia, 'Times New Roman', serif">※</text>
+  <path transform="scale(1,-1)" d="M111 331C84 331 61 308 61 281C61 254 84 231 111 231C138 231 161 254 161 280C161 308 139 331 111 331ZM471 331C444 331 421 308 421 281C421 254 444 231 471 231C498 231 521 254 521 280C521 308 499 331 471 331ZM301 151C274 151 251 128 251 101C251 74 274 51 301 51C328 51 351 74 351 100C351 128 329 151 301 151ZM301 511C274 511 251 488 251 461C251 434 274 411 301 411C328 411 351 434 351 460C351 488 329 511 301 511ZM300 311 157 453C149 461 145 464 139 464C127 464 118 455 118 443C118 437 121 432 128 424L271 282L128 139C121 132 118 127 118 120C118 109 127 100 139 100C145 100 150 103 158 110L300 253L442 110C450 102 455 100 461 100C473 100 482 109 482 120C482 127 480 131 471 139L329 282L471 424C479 432 482 437 482 443C482 455 472 464 461 464C455 464 451 462 442 453Z"/>
 </svg>
