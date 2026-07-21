@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · about</title>
+<meta name="description" content="moonshot, coff, the person building them, and the marks and licence they carry.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../index.html"><span class="mark">※</span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../technical/index.html">technical</a>
+    <a href="../blog/index.html">blog</a>
+    <a href="../releases/index.html">releases</a>
+    <a href="../about/index.html" class="here" aria-current="page">about</a>
+    <a href="../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <h1>about</h1>
+      <p class="article-meta">moonshot and coff</p>
+    </header>
+
+    <h2>how this started</h2>
+    <p>
+      <a class="int" href="../technical/c0/index.html">c0</a> and
+      <a class="int" href="../technical/coff/index.html">coff</a> exist because writing a kernel in someone
+      else's language, compiled by someone else's compiler, would leave the most
+      interesting layers of the machine unexplored.
+    </p>
+    <p>
+      all of this is built by one person, as a hobby, in whatever hours a day leaves over.
+      there is no roadmap and no version of "done" being raced toward. the intent is to keep
+      working on it indefinitely, for as long as it stays interesting,
+      which so far looks like it could be a lifetime.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true">✹</div>
+
+    <h2>the operating system</h2>
+    <p>
+      moonshot is a operating system for x86_64, built from scratch, booted through Multiboot and GRUB and run, for now, under QEMU.
+      it is written in <a class="int" href="../technical/c0/index.html">c0</a>, a language built for the purpose, and compiled by <a class="int" href="../technical/coff/index.html">coff</a>, a toolchain built alongside it.
+    </p>
+    <p>
+      the aim is a real graphical system. a linear
+      framebuffer with a hand-written font renderer already draws to the screen.
+    </p>
+    <figure class="shot">
+      <img src="../media/first-light.png" width="512" height="384"
+           alt="moonshot running under QEMU: the word MOONSHOT and a shell prompt drawn in moonshot's own font on a black framebuffer, with the output of the ps command listing running tasks.">
+      <figcaption>moonshot's own font, screenshot from early development.</figcaption>
+    </figure>
+
+    <div class="rule" role="separator" aria-hidden="true">✹</div>
+
+    <h2>the language and the compiler</h2>
+    <p>
+      <a class="int" href="../technical/c0/index.html">c0</a> is a small, C-like, imperative systems language and
+      <a class="int" href="../technical/coff/index.html">coff</a> is what compiles it. the two
+      exist above all for one reason, to be the language and toolchain that moonshot is
+      written in.
+    </p>
+    <p>
+      the compiler is self-hosted, which means it compiles its own source, and moonshot is built
+      exclusively through that self-hosted compiler, so the whole stack rests on as little
+      outside itself as it possibly can.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true">✹</div>
+
+    <h2>licence</h2>
+    <p>
+      the code (moonshot, <a class="int" href="../technical/coff/index.html">coff</a> and <a class="int" href="../technical/c0/index.html">c0</a>) is licensed under the
+      <strong>GNU GPL, version 3 or later</strong>. anyone who distributes the software,
+      or a work built from it, must release their source under the same terms, so
+      everything downstream stays open.
+    </p>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo">※</span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · c0</title>
+<meta name="description" content="c0: the small, C-like, freestanding systems language moonshot is written in.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark">※</span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>c0</h1>
+      <p class="article-meta">the language moonshot is written in</p>
+    </header>
+
+    <p>
+      c0 compiles to freestanding binaries, code that assumes no runtime and no standard library beneath it,<span class="sn"><label class="sn-marker" for="sn-freestanding">†</label><input type="checkbox" id="sn-freestanding" class="sn-toggle"><span class="sidenote">which is the only way a language can be used to write a kernel</span></span>
+      because the thing it is meant to write is a kernel. the feature set grows only when moonshot actually needs it. that is why c0 was pushed past the point of merely compiling itself, and on toward being a real, capable language.
+    </p>
+
+    <h2>one type</h2>
+    <p>
+      c0 has a single value type: <code>int</code>, a 64-bit signed
+      integer.<span class="sn"><label class="sn-marker" for="sn-onetype">†</label><input type="checkbox" id="sn-onetype" class="sn-toggle"><span class="sidenote">there is no unsigned type and no array type. a consequence worth knowing is that division is signed and truncating, so packed bit patterns are kept below 32 bits where the sign bit cannot interfere.</span></span>
+      everything is an <code>int</code>: numbers, characters, truth values and addresses.
+      memory is handled through an address value, and the builtins below read and write through it.
+    </p>
+
+    <h2>the shape of a program</h2>
+    <p>
+      the syntax is a small, familiar subset of C. functions (up to six parameters, with
+      recursion), global and local variables, <code>if</code>/<code>else</code>,
+      <code>while</code>, the usual arithmetic and comparison operators, character
+      literals with escapes, string literals, and <code>//</code> comments. a program
+      starts at <code>main</code>. source can be split across files with the
+      <code>include</code> directive, which <a class="int" href="../coff/index.html">coff</a> resolves
+      by plain textual substitution.
+    </p>
+    <pre><code>include "file.c0";
+
+// this is a comment.
+int main() {
+    int i = 0;
+    int sum = 0;
+    while (i &lt; 5) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}</code></pre>
+
+    <h2>builtins instead of a standard library</h2>
+    <p>
+      there is no standard library. a small set of builtins covers what the language
+      itself cannot express. <code>alloc</code> hands out zeroed memory, and
+      <code>load8</code>/<code>store8</code>/<code>load64</code>/<code>store64</code>
+      read and write it a byte or eight bytes at a time. <code>print</code> and
+      <code>write</code> produce output, <code>open</code> and <code>read</code> take
+      files in, and <code>exit</code> ends the program. hosted programs (like coff
+      itself) get <code>argc</code>/<code>argv</code>. the kernel uses none of the hosted
+      builtins and talks to hardware through the load/store pair instead.
+    </p>
+    <p>
+      the set is not frozen, a builtin is added when moonshot needs one the language
+      cannot otherwise reach, the same rule the language itself grows by. a general
+      standard library, though, is not a goal, for now, the kernel is meant to build
+      what it needs out of the primitives above.
+    </p>
+
+    <h2>the whole language</h2>
+    <p>
+      this is the entire vocabulary, c0 is small enough that it fits in a
+      list.
+    </p>
+    <dl class="commands">
+      <dt>types</dt>
+      <dd><code>int</code> only, a 64-bit signed integer, which also stands in for characters, truth values and addresses.</dd>
+      <dt>keywords</dt>
+      <dd><code>int</code>, <code>if</code>, <code>else</code>, <code>while</code>, <code>return</code>, <code>break</code>, <code>continue</code>.</dd>
+      <dt>directives</dt>
+      <dd><code>include "file.c0";</code> splices another source file in as text, resolved by <a class="int" href="../coff/index.html">coff</a> before compilation.</dd>
+      <dt>structure</dt>
+      <dd>functions of up to six parameters (recursion allowed), global and local variables, and <code>main</code> as the entry point.</dd>
+      <dt>operators</dt>
+      <dd>the arithmetic <code>+ - * /</code>, the comparisons <code>== != &lt; &lt;= &gt; &gt;=</code>, and <code>=</code> for assignment.</dd>
+      <dt>literals</dt>
+      <dd>integers, character literals with escapes, and string literals.</dd>
+      <dt>comments</dt>
+      <dd><code>//</code> to the end of the line.</dd>
+      <dt>builtins</dt>
+      <dd><code>alloc</code>, <code>load8</code>, <code>store8</code>, <code>load64</code>, <code>store64</code>, <code>print</code>, <code>write</code>, <code>open</code>, <code>read</code>, <code>exit</code>, and (hosted only) <code>argc</code>, <code>argv</code>, described just above.</dd>
+    </dl>
+
+    <h2>things are missing on purpose</h2>
+    <p>
+      a feature is
+      added when moonshot produces a concrete need for it, and not before, because every
+      feature the language gains is also code the compiler must carry, correctly, forever.
+      c0 has to stay small enough that its compiler can be held in your head and
+      re-verified against the bootstrap oracle.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+        <li><a href="../coff/index.html">coff</a></li>
+        <li><span class="wip" title="documentation not yet published">knekt</span></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo">※</span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,717 @@
+/* ==========================================================================
+   moonshot — landing page
+   own identity, gwern-structured. static HTML + CSS only, no JS yet.
+   colour: a single forced dark monochrome scheme — dark ground, light text,
+   no light mode and no system/theme switching. the ONE exception is --logo,
+   the colour of the ※ mark; everything else is neutral grey.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;     /* keep form controls / scrollbars dark too */
+
+  --bg:        #131313;
+  --bg-inset:  #1e1e1e;
+  --ink:       #e6e6e6;
+  --ink-soft:  #b6b6b6;
+  --muted:     #7c7c7c;
+  --accent:    #f2f2f2;   /* emphasis / links: the brightest neutral */
+  --accent-dim:#bdbdbd;
+  --rule:      #333333;
+  --logo:      #e08055;   /* the sole spot of colour: the ※ logo */
+
+  --measure:   40rem;     /* reading column width */
+  --gutter:    2rem;
+
+  /* system serif for now; the long-term plan is an own-made font, designed for
+     both this site and the kernel — not a downloaded third-party face. */
+  --serif: Georgia, 'Times New Roman', 'Nimbus Roman', 'Liberation Serif', serif;
+  --mono:  ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+/* --------------------------------------------------------------- base --- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* page frame: content centered, generous room in the right margin so
+     sidenotes have somewhere to live once the framework lands. */
+  padding: clamp(2rem, 6vw, 5rem) var(--gutter) 4rem;
+}
+
+::selection { background: var(--accent); color: var(--bg); }
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  /* monochrome scheme: colour alone no longer separates links from text, so
+     in-flow links carry a persistent underline. structural links (nav, brand,
+     crumbs) opt out below and lean on context instead. */
+  border-bottom: 1px solid var(--rule);
+  transition: border-color 120ms ease, color 120ms ease;
+}
+a:hover { color: var(--accent-dim); border-bottom-color: currentColor; }
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* external links: an explicit marker so it is clear the link leaves the site,
+   set in ink rather than the accent colour. applies across every page. */
+a.ext,
+a[href^="http"] {
+  color: var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+a.ext:hover,
+a[href^="http"]:hover {
+  color: var(--accent-dim);
+  border-bottom-color: currentColor;
+}
+a.ext::after,
+a[href^="http"]::after {
+  content: "\2197";            /* ↗ leaves-the-site marker */
+  font-size: 0.7em;
+  vertical-align: 0.28em;
+  margin-left: 0.12em;
+  color: var(--muted);
+}
+
+/* internal cross-references: marked with a small ※, the site's own reference
+   mark, so they read differently from the ↗ that leaves the site. sits on the
+   baseline, not raised. */
+a.int::after {
+  content: "\203B";            /* ※ stays-on-the-site marker */
+  font-size: 0.7em;
+  margin-left: 0.18em;
+  color: var(--muted);
+}
+
+/* withheld references: the moonshot operating-system documentation is written
+   but held back from publication until it has been reviewed by hand. a link
+   that would lead into it is rendered inert (a plain span, not an anchor, so it
+   goes nowhere), shown in muted text, and marked with a broken ⚠. see the meta
+   page for the note to readers. */
+.wip {
+  color: var(--muted);
+  cursor: not-allowed;
+  border-bottom: 1px dotted var(--rule);
+}
+.wip::after {
+  content: "\26A0\FE0E";       /* ⚠ withheld / not-yet-published marker */
+  font-size: 0.7em;
+  vertical-align: 0.28em;
+  margin-left: 0.18em;
+  color: var(--muted);
+}
+
+h1, h2, h3 { font-weight: 400; line-height: 1.2; }
+
+.mark  { color: var(--logo); }   /* the ※ logo: the one coloured element */
+.muted { color: var(--muted); }
+
+/* ------------------------------------------------------------- header --- */
+
+.site-head,
+main,
+.site-foot { max-width: var(--measure); margin-inline: auto; }
+
+.site-head { margin-bottom: 2.5rem; }
+
+.site-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4ch;
+  font-size: clamp(2.4rem, 7vw, 3.4rem);
+  letter-spacing: -0.01em;
+  margin: 0 0 0.35rem;
+}
+/* the ※ glyph sits optically high in its em box; nudge it down so the mark and
+   the word share a true vertical centre. */
+.site-title .mark {
+  line-height: 1;
+  transform: translateY(0.07em);
+}
+
+.tagline {
+  margin: 0;
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 1.05rem;
+  max-width: 34rem;
+}
+
+/* --------------------------------------------------------------- main --- */
+
+main > section { margin: 0; }
+
+/* section labels (ABOUT / NEWEST / CATEGORIES on the home page, TECHNICAL /
+   RELATED on the documentation pages): one shared style, everywhere. larger
+   and tighter than the first take, which read as too small and too airy. */
+h2 {
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 0.9rem;
+}
+
+.about p {
+  margin: 0 0 1.1rem;
+  text-align: justify;
+  hyphens: auto;
+}
+.about p:last-child { margin-bottom: 0; }
+.about strong { font-weight: 700; }
+
+/* asterism separators: set in the logo colour, like the ※ mark */
+.rule {
+  text-align: center;
+  color: var(--logo);
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: 0.4em;
+  margin: 3rem 0;
+  user-select: none;
+  opacity: 0.85;
+}
+
+/* motto — sits under the last separator, above the footer */
+.motto {
+  text-align: center;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+/* newest + categories, side by side. sits well below the about section so the
+   two blocks read as separate. */
+.index {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: 2.4rem;
+  margin-top: 3.6rem;
+}
+
+ul.entries,
+ul.categories { list-style: none; margin: 0; padding: 0; }
+
+ul.entries li,
+ul.categories li {
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+ul.entries .glyph { color: var(--muted); margin-right: 0.5ch; }
+
+/* each category carries its own icon */
+ul.categories li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6ch;
+}
+ul.categories .cat-icon {
+  flex: none;
+  width: 1.3em;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.95em;
+}
+/* category names carry the same link styling as the newest list beside them:
+   the base accent colour and persistent underline, no special casing. */
+ul.categories .gloss {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* ------------------------------------------------------------- footer --- */
+
+.site-foot {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  margin-top: 3.5rem;
+}
+.site-foot .foot-rule {
+  flex: 1;
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 0;
+}
+.site-foot .foot-logo {
+  font-size: 1.6rem;
+  line-height: 1;
+  /* the ※ glyph rides high in its box; drop it so it lines up with the rules. */
+  transform: translateY(0.16em);
+}
+
+/* ---------------------------------------------- sub-page header + nav --- */
+
+.site-head.sub {
+  margin-bottom: 2.2rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4ch;
+  color: var(--ink);
+  font-size: 1.5rem;
+  border-bottom: 0;
+}
+/* the ※ glyph rides optically high in its em box; drop it so the mark and the
+   word share a true vertical centre, matching the home-page title. */
+.brand .mark {
+  color: var(--logo);
+  line-height: 1;
+  transform: translateY(0.06em);
+}
+.brand:hover { color: var(--ink); }
+
+nav.cats {
+  margin-top: 0.7rem;
+  line-height: 1.9;
+}
+nav.cats a { color: var(--muted); border-bottom: 0; }
+nav.cats a:hover { color: var(--accent-dim); }
+nav.cats a.here { color: var(--accent); }
+nav.cats a:not(:last-child)::after {
+  content: "·";
+  color: var(--rule);
+  margin: 0 0.5rem;
+}
+
+/* ------------------------------------------------- category listings --- */
+
+.cat-head { margin-bottom: 1.8rem; }
+.cat-head h1 {
+  font-size: clamp(1.9rem, 5vw, 2.6rem);
+  margin: 0 0 0.25rem;
+}
+.cat-desc {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+ul.listing { list-style: none; margin: 0; padding: 0; }
+ul.listing li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6ch;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+ul.listing .sum { color: var(--ink-soft); flex: 1; }
+ul.listing time { color: var(--muted); font-size: 0.9rem; white-space: nowrap; }
+
+/* a listing whose rows are titled links (the blog feed): the link already
+   carries its own underline, so the per-row rule would only double it. */
+ul.listing.flat li { border-bottom: 0; padding: 0.35rem 0; }
+
+.empty {
+  color: var(--muted);
+  font-style: italic;
+  padding: 1.4rem 0;
+}
+
+/* ------------------------------------------------------- article page --- */
+
+/* the article page is wider than the home measure, so sidenotes have a
+   right-hand gutter to live in. header / footer widen to match, so the nav
+   and the reading column share the same left edge. */
+body.page-article .site-head,
+body.page-article main,
+body.page-article .site-foot { max-width: 52rem; }
+
+.article > * { max-width: 38rem; }   /* the reading measure; notes escape right */
+
+.article-head { max-width: 38rem; margin-bottom: 2.2rem; }
+/* the crumb shares the section-label style above (same size, tracking,
+   weight, colour), so TECHNICAL reads the same on every page it appears. */
+.crumb {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.crumb a { color: var(--ink-soft); border-bottom: 0; }
+.crumb a:hover { color: var(--accent); }
+.article-head h1 {
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  letter-spacing: -0.01em;
+  margin: 0 0 0.45rem;
+}
+.article-meta { margin: 0; color: var(--muted); font-style: italic; }
+
+.article p {
+  margin: 0 0 1.15rem;
+  text-align: justify;
+  hyphens: auto;
+}
+.article p.lead {
+  font-size: 1.12rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  text-align: left;
+  hyphens: none;
+}
+.article h2 {
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: -0.005em;
+  font-size: 1.55rem;
+  font-weight: 700;
+  margin: 2.4rem 0 0.8rem;
+}
+
+/* code */
+.article :not(pre) > code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--bg-inset);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+.article pre {
+  max-width: 38rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  background: var(--bg-inset);
+  padding: 1rem 1.1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+/* --- sidenotes: pure-CSS, click a marker to toggle --- */
+.sn { }                       /* per-note wrapper: keeps toggles independent */
+.sn-toggle { display: none; } /* the hidden checkbox */
+
+.sn-marker {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.9em;
+  vertical-align: super;
+  line-height: 0;
+  /* a bigger, padded hit area so the marker is easy to tap, not a pinpoint */
+  padding: 0.35em 0.4em;
+  margin: 0 0.05em;
+  border-radius: 3px;
+  user-select: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+.sn-marker:hover {
+  color: var(--accent-dim);
+  background: var(--bg-inset);
+}
+
+.sidenote { display: none; }
+.sn-toggle:checked ~ .sidenote {
+  display: block;
+  float: right;
+  clear: right;
+  width: 11rem;
+  margin: 0.2rem -14rem 1rem 0;   /* push out into the right gutter */
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  text-align: left;
+  hyphens: none;
+}
+.sidenote code { font-size: 0.85em; }
+
+/* on narrow screens there is no gutter — reveal notes inline instead */
+@media (max-width: 56rem) {
+  .sn-toggle:checked ~ .sidenote {
+    float: none;
+    clear: none;
+    width: auto;
+    margin: 0.7rem 0;
+    padding: 0.6rem 0.9rem;
+    background: var(--bg-inset);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 3px 3px 0;
+  }
+}
+
+/* ------------------------------------------------ documentation hub --- */
+
+/* the technical landing is a categorised directory of the stack, not a feed. */
+.doc-group { margin: 0 0 2.4rem; }
+.doc-group:last-of-type { margin-bottom: 0; }
+/* dim the group label to --muted so it reads clearly as a quiet header over the
+   brighter part links below, which otherwise sit too close to it in tone. */
+.doc-group > h2 { margin-bottom: 0.4rem; color: var(--muted); }
+.doc-group > .doc-desc {
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+ul.doc-index { list-style: none; margin: 0; padding: 0; }
+ul.doc-index li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9ch;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+ul.doc-index a.part {
+  flex: none;
+  min-width: 6rem;
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: transparent;
+}
+ul.doc-index a.part:hover { color: var(--accent); border-bottom-color: currentColor; }
+ul.doc-index .role { color: var(--ink-soft); }
+
+/* bidirectional navigation: a "related" strip at the foot of each doc page. */
+.related {
+  margin-top: 2.6rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.95rem;
+}
+.related h2 {
+  /* same style as every other section label; only the margin is its own */
+  font-size: 0.98rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 0 0 0.6rem;
+}
+.related ul { list-style: none; margin: 0; padding: 0; }
+.related li { display: inline; }
+.related li:not(:last-child)::after {
+  content: "·";
+  color: var(--rule);
+  margin: 0 0.5rem;
+}
+
+/* a vertical pipeline diagram (used on the coff page): stages as boxes,
+   the data flowing between them as small arrow labels. plain HTML + CSS. */
+.pipeline {
+  margin: 1.4rem 0 1.6rem;
+  max-width: 38rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.pipeline .pl-stage {
+  /* a fixed width so every stage box is the same size; the widest label (the
+     system assembler and linker) used to stretch its box past the others. */
+  width: 18rem;
+  max-width: 100%;
+  padding: 0.45rem 1.1rem;
+  text-align: center;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  background: var(--bg-inset);
+  color: var(--ink);
+}
+/* a stage that is not coff's own (the system assembler and linker) */
+.pipeline .pl-stage.pl-outside {
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+.pipeline .pl-flow {
+  padding: 0.3rem 0 0.3rem 1.4rem;
+  color: var(--muted);
+}
+.pipeline .pl-flow .pl-what { color: var(--ink-soft); }
+.pipeline .pl-io { color: var(--ink-soft); padding-left: 0.2rem; }
+
+/* a command reference, as a definition list (used on the skalman page) */
+dl.commands { margin: 0.6rem 0 1.15rem; }
+dl.commands dt {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 1rem;
+}
+dl.commands dd {
+  margin: 0.15rem 0 0;
+  color: var(--ink-soft);
+}
+
+/* a screenshot, framed and captioned. the image is pixel art from the kernel's
+   own framebuffer, so keep it crisp rather than letting the browser smooth it. */
+figure.shot {
+  margin: 1.6rem 0;
+  max-width: 38rem;
+}
+figure.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: #000;
+  image-rendering: pixelated;
+}
+figure.shot figcaption {
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+/* an honest "still to be written" marker for pages that are stubs on purpose. */
+.stub-note {
+  margin: 1.4rem 0 0;
+  padding: 0.7rem 0.95rem;
+  background: var(--bg-inset);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 3px 3px 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+/* ---------------------------------------------------- resources page --- */
+
+.marks {
+  display: flex;
+  gap: 2.5rem;
+  margin: 1.1rem 0 1.6rem;
+}
+.mark-cell { text-align: center; }
+.mark-cell .glyph {
+  display: block;
+  font-size: 3.2rem;
+  line-height: 1;
+  color: var(--logo);
+}
+.mark-cell .label {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.6rem 0 1rem;
+  max-width: 38rem;
+}
+.swatch { font-size: 0.8rem; color: var(--muted); }
+.swatch .chip {
+  display: block;
+  width: 5rem;
+  height: 3rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+/* licence options, as a tidy definition list */
+dl.licences { margin: 0.6rem 0 1.15rem; }
+dl.licences dt {
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 1rem;
+}
+dl.licences dd {
+  margin: 0.15rem 0 0;
+  color: var(--ink-soft);
+}
+
+/* ----------------------------------------------------- releases page --- */
+
+.release-card {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1.2rem 1.3rem;
+  margin: 1.4rem 0 2rem;
+  background: var(--bg-inset);
+}
+.release-card .rc-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6ch 1rem;
+}
+.release-card .rc-version {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.release-card .rc-date { color: var(--muted); font-size: 0.9rem; }
+/* the status note: quiet italic text, not a badge fighting the version for
+   attention. */
+.release-card .rc-status {
+  margin-left: auto;
+  font-style: italic;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.release-card .rc-note { margin: 0.9rem 0 0; color: var(--ink-soft); }
+
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 1rem 0 0;
+}
+.dl {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6ch;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  cursor: not-allowed;      /* nothing to download yet */
+}
+.dl .dl-kind { color: var(--ink-soft); font-weight: 700; }
+.dl .dl-meta { font-size: 0.82rem; }
+
+/* a download chip that actually goes somewhere (e.g. the source repository) */
+a.dl {
+  cursor: pointer;
+  color: var(--muted);
+}
+a.dl:hover {
+  color: var(--ink-soft);
+  border-color: var(--muted);
+}
+a.dl::after { content: none; }   /* the chip itself signals enough; no ↗ */
+
+ol.install {
+  margin: 0.6rem 0 0;
+  padding-left: 1.3rem;
+  color: var(--ink-soft);
+}
+ol.install li { margin: 0 0 0.4rem; }
+
+/* ------------------------------------------------------------- mobile --- */
+
+@media (max-width: 34rem) {
+  body { font-size: 18px; }
+  .index { grid-template-columns: 1fr; gap: 1.8rem; }
+  .about p { text-align: left; }
+}

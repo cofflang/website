@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · i built a compiler to build a kernel</title>
+<meta name="description" content="the first entry in the moonshot development log.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark">※</span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html">technical</a>
+    <a href="../../blog/index.html" class="here" aria-current="page">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">blog</a></p>
+      <h1>i built a compiler to build a kernel</h1>
+      <p class="article-meta"><time datetime="2026-07-21">2026-07-21</time></p>
+    </header>
+
+    <p>
+      i have always wanted to build an operating system with a real graphical interface. and now moonshot is being built in whatever hours a day leaves over, and it will be finished when it is finished, if ever.
+    </p>
+
+    <h2>the first moonshot</h2>
+    <p>
+      this is not the first moonshot. the first one carried the same name and ran on
+      RISC-V, under QEMU, written in plain C and assembly. i did not get very far with it, i got stuck
+      working on coff on the side, my assembly code ended up in a state i could not
+      untangle, and somewhere in that mess the motivation went out of
+      it.<span class="sn"><label class="sn-marker" for="sn-old">†</label><input type="checkbox" id="sn-old" class="sn-toggle"><span class="sidenote">not a single line of that code was re-used in this project.</span></span>
+      what the failure taught me is that i did not want to patch a wobbly foundation, i
+      wanted to build something robust from the beginning, and in the right order this
+      time.
+    </p>
+
+    <h2>self-made</h2>
+    <p>
+      the right order meant starting further down than a kernel. before moonshot
+      drew anything on screen, i built <a class="int" href="../../technical/c0/index.html">c0</a>, a small
+      systems language, and <a class="int" href="../../technical/coff/index.html">coff</a>, its
+      compiler. then coff was rewritten in c0 until it compiled its own
+      source.<span class="sn"><label class="sn-marker" for="sn-selfhost">†</label><input type="checkbox" id="sn-selfhost" class="sn-toggle"><span class="sidenote">every build of the self-hosted compiler is checked byte-for-byte against the bootstrap compiler.</span></span>
+      moonshot is built through that self-hosted compiler alone.
+    </p>
+
+    <h2>first light</h2>
+    <p>
+      the kernel's Multiboot header asks GRUB for a 1024×768 graphics mode,
+      <span class="wip" title="documentation not yet published">punkt</span> maps
+      the framebuffer the bootloader hands back, and the font renderer paints
+      moonshot's own characters into it, pixel by pixel. and then it was simply there,
+      <strong>MOONSHOT</strong>, drawn by my kernel, in my font, compiled by my compiler.
+      typing on the keyboard put letters on the screen. :-)
+    </p>
+    <figure class="shot">
+      <img src="../../media/first-boot.png" width="128" height="48"
+           alt="the word MOONSHOT above the letters OS, drawn in moonshot's own font on a black framebuffer: the first thing the kernel ever put on the screen.">
+      <figcaption>screenshot from first boot.</figcaption>
+    </figure>
+
+    <h2>the road ahead</h2>
+    <p>
+      the aim is a
+      real graphical system, the next step in that direction is something that can hold
+      more than one thing on the screen at once, the beginning of a windowing layer.
+      underneath it, the kernel already runs more than one task at a time through
+      <span class="wip" title="documentation not yet published">chrone</span>, and the shell,
+      <span class="wip" title="documentation not yet published">skalman</span>, can start and stop them.
+    </p>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo">※</span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

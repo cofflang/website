@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · coff</title>
+<meta name="description" content="coff: the self-hosted compiler that turns c0 into running programs, and builds moonshot.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark">※</span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>coff</h1>
+      <p class="article-meta">the self-hosted compiler for <a href="../c0/index.html">c0</a></p>
+    </header>
+
+    <h2>self-hosted</h2>
+    <p>
+      coff is written in <a class="int" href="../c0/index.html">c0</a> and compiles its own source. that is the milestone that lets the
+      whole stack lean on as little outside itself as it can. the compiler that first bootstrapped it, <code>coff0</code> (explained below), now serves only as
+      a testing oracle. every self-hosted build is checked byte-for-byte against
+      it,<span class="sn"><label class="sn-marker" for="sn-oracle">†</label><input type="checkbox" id="sn-oracle" class="sn-toggle"><span class="sidenote">a byte-for-byte match means the self-hosted compiler produces exactly the same output as the reference, which is strong evidence it did not drift as it took over from the bootstrap.</span></span>
+      so the two must agree. moonshot itself is built through the self-hosted compiler alone.
+    </p>
+
+    <h2>coff0</h2>
+    <p>
+      a self-hosted compiler has a chicken-and-egg problem. coff is written in c0, so
+      something else had to compile it the very first
+      time.<span class="sn"><label class="sn-marker" for="sn-coff0">†</label><input type="checkbox" id="sn-coff0" class="sn-toggle"><span class="sidenote">the naming follows the generations, <code>coff0</code> is the zeroth compiler, the one that existed before c0 could compile anything, the self-hosted compiler it built is <code>coff1</code>.</span></span>
+      that something is <code>coff0</code>, a compiler for the same c0 language, written
+      in plain C and built with an ordinary C compiler. it existed for exactly one
+      purpose, to compile the first c0-written coff, and once that build could compile
+      itself, coff0 was retired from the build entirely.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true">✹</div>
+
+    <h2>splitting source across files</h2>
+    <p>
+      to keep large programs manageable, <a class="int" href="../c0/index.html">c0</a> has one simple tool for splitting source across
+      files, an <code>include</code> directive, resolved by coff as plain textual
+      substitution before compilation begins.
+    </p>
+
+    <pre><code>include "jenna.c0";
+include "chrone.c0";
+include "punkt.c0";</code></pre>
+
+    <p>
+      this is substitution, not separate
+      compilation.<span class="sn"><label class="sn-marker" for="sn-textual">†</label><input type="checkbox" id="sn-textual" class="sn-toggle"><span class="sidenote">the included files are spliced in as raw text, and one flat buffer reaches the compiler, exactly as a single file always has. the parser does not even know the feature exists.</span></span>
+      it is enough to break a growing kernel into files named after its parts, without
+      inventing a whole module system before one is needed.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true">✹</div>
+
+    <h2>inside the compiler</h2>
+    <p>
+      coff is a straight pipeline. include expansion produces one flat buffer of source, a
+      lexer turns it into tokens, a parser builds the program from those tokens, and code
+      generation emits x86_64 assembly, which the system assembler and linker turn into a
+      freestanding binary. there is no optimiser, the point, for now, is output that is
+      simple and easy to check.
+    </p>
+
+    <div class="pipeline" role="img" aria-label="the coff pipeline: c0 source files go through include expansion into one flat buffer, the lexer turns that into tokens, the parser builds the program, code generation emits x86_64 assembly, and the system assembler and linker produce a freestanding binary.">
+      <div class="pl-io">c0 source files</div>
+      <div class="pl-flow">↓</div>
+      <div class="pl-stage">include expansion</div>
+      <div class="pl-flow">↓ <span class="pl-what">one flat buffer of source</span></div>
+      <div class="pl-stage">lexer</div>
+      <div class="pl-flow">↓ <span class="pl-what">tokens</span></div>
+      <div class="pl-stage">parser</div>
+      <div class="pl-flow">↓ <span class="pl-what">the whole program</span></div>
+      <div class="pl-stage">code generation</div>
+      <div class="pl-flow">↓ <span class="pl-what">x86_64 assembly</span></div>
+      <div class="pl-stage pl-outside">system assembler and linker</div>
+      <div class="pl-flow">↓</div>
+      <div class="pl-io">freestanding binary</div>
+    </div>
+
+    <p>
+      the dashed stage is the one step coff does not do itself. the assembly it emits is
+      handed to the system's assembler and linker. everything above that line is coff's
+      own.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+        <li><a href="../c0/index.html">c0</a></li>
+        <li><span class="wip" title="documentation not yet published">knekt</span></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo">※</span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

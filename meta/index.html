@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · meta</title>
+<meta name="description" content="this website: how it is built, how to use it, and what has changed.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../index.html"><span class="mark">※</span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../technical/index.html">technical</a>
+    <a href="../blog/index.html">blog</a>
+    <a href="../releases/index.html">releases</a>
+    <a href="../about/index.html">about</a>
+    <a href="../meta/index.html" class="here" aria-current="page">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <h1>meta</h1>
+      <p class="article-meta">how this website is built and how to use it</p>
+    </header>
+
+    <h2>how the site is built</h2>
+    <p>
+      the site is written by hand as static HTML and CSS, for now.
+    </p>
+
+    <h2>how to use it</h2>
+    <p>
+      longer articles use margin notes. a small raised marker (like this one<span class="sn"><label class="sn-marker" for="sn-demo">†</label><input type="checkbox" id="sn-demo" class="sn-toggle"><span class="sidenote">this is a margin note. click the marker again to put it away. the whole mechanism is pure CSS, so it keeps working with JavaScript switched off.</span></span>)
+      opens a note when you click it, and closes it when you click again. links that leave
+      the site are marked with a small ↗ so you know before you follow them, and
+      cross-references that stay on the site carry a small ※.
+    </p>
+    <p>
+      some names point at documentation that is written but not yet published. these are
+      shown in muted text with a small ⚠ and do not lead anywhere for now. the
+      operating-system internals are being gone through by hand before they are opened
+      up, so their links are held back this way in the meantime.
+    </p>
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo">※</span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>
