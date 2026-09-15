@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · trust</title>
+<meta name="description" content="how the coff toolchain is verified against the trusting trust attack, plus what moonshot is still trusted on.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>trust</h1>
+      <p class="article-meta">what the toolchain is verified against, what was removed from it, plus what it is still trusted on</p>
+    </header>
+
+    <h2>the oldest problem in compilers</h2>
+    <p>
+      a compiler reads source code and writes machine code, which means that whatever the
+      compiler does is what actually runs, not whatever the source says. in 1984 Ken Thompson
+      used his Turing award lecture to point out where that leads. he modified a C compiler so
+      that it recognised one particular program, the Unix login program. every time login
+      was compiled the compiler quietly added a backdoor to it. reading the login source would show nothing
+      wrong, because nothing was wrong with the login source.
+    </p>
+    <p>
+      the second half is the part that makes it survive. the modified compiler also recognised
+      its own source. whenever it was asked to compile a compiler it inserted both halves of
+      the trick into the result. Thompson then deleted his modified source and kept only the
+      binary. from that point the backdoor lived in no source file anywhere, it reproduced itself
+      into every future compiler built from perfectly clean code. reading the compiler source
+      would show nothing wrong
+      either.<span class="sn"><label class="sn-marker" for="sn-lower">†</label><input type="checkbox" id="sn-lower" class="sn-toggle"><span class="sidenote">Thompson also pointed out that a compiler is not the only place this works. in his words, "i could have picked on any program-handling program such as an assembler, a loader, or even hardware microcode. as the level of program gets lower, these bugs will be harder and harder to detect."</span></span>
+    </p>
+    <p>
+      this matters here more than it matters for most projects, because <a class="int" href="../coff/index.html">coff</a> is
+      self-hosted. it is written in <a class="int" href="../c0/index.html">c0</a> and it compiles its own source, so
+      the compiler that builds moonshot is a binary whose ancestry runs back through other
+      binaries. that is exactly the shape the attack was designed for.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2>the fixpoint proves nothing</h2>
+    <p>
+      the coff test suite has always checked that the bootstrap settles. it compiles the compiler
+      source with the compiler, then compiles it again with the result. the two
+      outputs have to be byte-identical. that check is worth having, it catches a compiler that has
+      drifted away from its own source. it is very tempting to read that as a security result. it is not one, because
+      byte-identical self-reproduction is the precise property a Thompson payload is built to
+      preserve, so a clean toolchain and a fully compromised one look the same from the
+      outside.
+    </p>
+    <p>
+      rather than argue that, we tested it. a stand-in for a compromised C compiler was written
+      that silently altered the <code>coff0</code> binary it produced while leaving
+      <code>coff0.c</code> byte-identical to what is in the repository. it was given a real
+      target, the password check inside moonshot's user
+      accounts.<span class="sn"><label class="sn-marker" for="sn-target">†</label><input type="checkbox" id="sn-target" class="sn-toggle"><span class="sidenote">the function is <code>sk_user_check_pass</code> in skalman. the payload replaced its whole body with two instructions, load one into the return register and return, so every password typed at the login prompt was accepted.</span></span>
+      the compiler then handed back a kernel whose login accepted any password at all.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2>diverse double-compiling</h2>
+    <p>
+      there is one known way to catch this, described by David A. Wheeler in 2009 under the name
+      diverse double-compiling. it works by attacking the one weak point the trick has. the
+      payload has to recognise its targets. deciding correctly what a program is in every case is
+      not something any program can do, so a payload must eventually make a mistake. diverse
+      double-compiling forces the mistake into the open by building the same compiler source with
+      a second compiler written by different people, sharing no code with the first, then checking
+      that the two results behave identically. a payload would have to exist in both compilers,
+      recognise the same source in both and emit the same injected machine code from two unrelated
+      codebases, which is not a plausible thing to happen by accident or by one attacker.
+    </p>
+    <p>
+      this is possible for coff only because <code>coff0</code> stayed small. it is a little over
+      two thousand lines of plain C with no build system and no dependencies beyond the standard
+      library, so a second C compiler can build it without any porting work. keeping it that way is
+      a security property of the project rather than tidiness, which is why <code>coff0</code> is
+      not going to be retired even though the self-hosted compiler has long since outgrown it.
+    </p>
+    <p>
+      the comparison runs over every c0 source file in the tree, moonshot's own kernel sources
+      included, and the attack above is why it cannot be narrower. comparing only the compiler
+      compiling itself passes with that payload live, since it fires on the kernel and never on
+      the compiler, so the two compilers agree perfectly on the one file being compared. with the
+      kernel in the comparison the attack is caught immediately. a payload is only ever caught
+      where it fires, so the set of files being compared has to contain the code that is worth
+      attacking.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2>what gets checked</h2>
+    <p>
+      a single audit script runs the whole thing in four stages. it rebuilds the entire chain from
+      source and compares the result byte for byte against every compiler binary committed to the
+      repository, so a tampered binary cannot sit there being trusted. it re-runs the bootstrap
+      fixpoint. it checks that the compiler is deterministic. last of all it runs the
+      diverse double-compile and validates a recorded manifest of hashes.
+    </p>
+    <p>
+      the determinism stage comes before the diversity stage on purpose, because a compiler whose
+      output wanders cannot be checked against another compiler at all, there is no way to tell an
+      attack apart from noise. so the output has to be identical under a hostile time zone, under a
+      forced build timestamp and under a Turkish
+      locale,<span class="sn"><label class="sn-marker" for="sn-turkish">†</label><input type="checkbox" id="sn-turkish" class="sn-toggle"><span class="sidenote">Turkish has a dotless i, so converting 'i' to upper case there does not give 'I'. it is the classic locale for breaking a lexer that folds case. it has caught real compilers out.</span></span>
+      the binary must not change when it is built in a different directory and it must carry no
+      embedded host path, build date or build identifier.
+    </p>
+    <p>
+      the kernel build is the strictest link. it checks the compiler against its recorded hash
+      on every single build and refuses to produce a kernel when the check fails, so no kernel
+      comes out of an unverified compiler. a timestamp check, the usual way a build decides
+      whether a tool is current, would ask only whether one file was written after another,
+      which is a question a tampered binary answers correctly without any trouble.
+    </p>
+    <p>
+      the recorded hashes cover more than the compiler. build code is code, so the build scripts are hashed too. the
+      test files are hashed as well, because of how moonshot ships programs. the kernel has no way to receive a file from a host, so every ring-3 program is baked into the
+      kernel image as an array of bytes by a generator script. the programs that get baked in
+      come out of the test directory. a test file in this project becomes code running inside the
+      operating system, which is close enough to how the xz utils backdoor of 2024 got into
+      millions of machines that it deserves the same care as the compiler
+      itself.<span class="sn"><label class="sn-marker" for="sn-xz">†</label><input type="checkbox" id="sn-xz" class="sn-toggle"><span class="sidenote">that backdoor was not in the library source at all. it lived in the build machinery and in files that looked like test data, which is why reviewing only the obvious source files would not have found it.</span></span>
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2>no C compiler in particular</h2>
+    <p>
+      the seed compiler is tcc, not gcc. gcc has an awkward property, which is that there is no
+      way to get a trustworthy one except from another gcc. it is reachable from nothing.
+      <code>coff0</code> built by tcc alone, with gcc absent from the whole build, produces a
+      self-hosted compiler that is byte-identical to the one gcc produces. that compiler emits
+      byte-identical assembly for the moonshot kernel. the full test suite passes with no gcc
+      anywhere in it.
+    </p>
+    <p>
+      tcc is worth the switch because it can be reached. there is a chain of work by other people,
+      going under the name bootstrappable builds, that starts from a 357 byte seed binary small
+      enough to check by hand against its own documented source. it builds upward through a
+      series of increasingly capable tools until it arrives at a self-hosting
+      tcc.<span class="sn"><label class="sn-marker" for="sn-seed">†</label><input type="checkbox" id="sn-seed" class="sn-toggle"><span class="sidenote">the seed is called hex0. the steps above it are hex1, hex2, M0, M1, M2-Planet, then GNU Mes and its C compiler, then tcc. Guix has shipped a distribution built this way since 2022.</span></span>
+      tcc can build <code>coff0</code>. <code>coff0</code> is itself small enough for one person to
+      read in an afternoon, so moonshot now has a route from a hand-checkable seed all the
+      way up to a running kernel, with no step in it that has to be taken on faith in a binary
+      nobody can read.
+    </p>
+    <p>
+      that route is mapped rather than walked. the tcc in use here was built by gcc, so it is not
+      yet independent of gcc, it only makes an attack much harder by requiring gcc to recognise
+      tcc's source, survive tcc rebuilding itself and still recognise <code>coff0</code>.
+      getting tcc from the seed instead is the next piece of work.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2>smed, our own assembler and linker</h2>
+    <p>
+      the assembler and the linker were the largest remaining gap. they are also the gap Thompson
+      pointed at first, since a compromised assembler sits underneath every compiler on the machine
+      at once. coff emits assembly text, which was then handed to the system assembler and linker,
+      so those two got to decide what the final bytes were no matter how carefully the compiler had
+      been checked. rather than keep verifying somebody else's tools, we wrote our own.
+      <strong>smed</strong> is one program that both assembles and links, written in
+      c0 and compiled by coff. it now builds coff itself with no GNU tool
+      involved.<span class="sn"><label class="sn-marker" for="sn-smed">†</label><input type="checkbox" id="sn-smed" class="sn-toggle"><span class="sidenote">smed is Swedish for smith, the thing that forges raw machine code out of text. one tool rather than a separate assembler and linker, because this project only ever links one translation unit at a time, so the usual split would buy nothing and cost an object file format, a symbol table format and relocation records, which is three more things to audit.</span></span>
+    </p>
+    <p>
+      smed never picks a short encoding. a normal assembler starts with a short jump, finds that
+      the target moved out of reach, widens it and goes round again until the layout stops
+      changing. smed instead always emits the wide form, so an instruction's size depends only
+      on the instruction. the pass that measures and the pass that emits agree by construction.
+      the whole settle-to-a-fixpoint problem disappears, taking with it a class of bug that would
+      be very hard to see. the binary comes out about two percent larger, which is a price worth
+      paying.
+    </p>
+    <p>
+      an assembler that is subtly wrong does not crash, it hands back a program that computes the
+      wrong answer, so smed is checked rather than trusted. every c0 program in the tree is
+      assembled twice, once by smed and once by the system tools. the two binaries have to
+      agree on their exit code and on every byte they print. every one of them does. the
+      compiler smed builds reproduces its own assembly byte for byte, smed assembles itself so that the result
+      behaves identically. the whole suite passes with no compiler, assembler or linker
+      on the machine having anything to do with it. flipping a single
+      direction bit in one opcode, which changes nothing about the length of the instruction while
+      quietly reversing which operand is the destination, makes a whole run of those programs
+      diverge at once.<span class="sn"><label class="sn-marker" for="sn-oracle2">†</label><input type="checkbox" id="sn-oracle2" class="sn-toggle"><span class="sidenote">the system assembler is being removed from the build, not from the test bench. using the tool you are replacing to check the replacement is exactly what coff0 does for coff. it stops working the day the old tool is uninstalled, by which point the comparison has been run thousands of times.</span></span>
+    </p>
+
+    <h2>what is still trusted</h2>
+    <p>
+      the kernel has not moved over yet. moonshot is still assembled and linked by the system
+      tools, because its startup code is hand-written assembly that switches the processor from
+      32-bit to 64-bit mode partway through a file, which is a dialect smed does not speak yet. that
+      is the next piece of work. it is the last one that removes a whole component rather than
+      merely checking it. smed also has no independent implementation of its own, so its only
+      oracle is the tool it is replacing. below all of that sit the C library used by the seed
+      compiler, the Linux kernel the build runs on, the processor microcode and the silicon. none
+      of those are things a hobby project is going to verify.
+    </p>
+    <p>
+      so none of this proves moonshot has no backdoor. nothing available to anyone building an
+      operating system in their spare time could prove that. what it does is smaller and real.
+      every binary between the readable seed compiler and a running kernel is derived from source
+      in the repository and continuously checked to still be, a tampered compiler cannot quietly
+      compile a kernel, the compiler is cross-checked against an unrelated implementation over the
+      code that actually matters. the things still taken on faith are written down by name instead
+      of forgotten. the honest claim is a small and shrinking set of trusted parts with a
+      mapped route down to a seed you can read, which is a good deal better than a green test suite
+      that turned out to mean nothing.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+        <li><a href="../coff/index.html">coff</a></li>
+        <li><a href="../c0/index.html">c0</a></li>
+        <li><a href="../skalman/index.html">skalman</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

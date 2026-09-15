@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · skrift</title>
+<meta name="description" content="skrift, the text editor of the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>skrift</h1>
+      <p class="article-meta">the text editor</p>
+    </header>
+
+    <p>
+      skrift is moonshot's text editor. it runs inside a
+      <a class="int" href="../kakel/index.html">kakel</a> window and reads and writes
+      files through <a class="int" href="../jakel/index.html">jakel</a>. type
+      <code>edit (filename)</code> from
+      <a class="int" href="../skalman/index.html">skalman</a> to open a file. the
+      editor takes over the keyboard. no shell prompt, no echo, just a buffer and a
+      cursor.
+    </p>
+
+    <h2>modes</h2>
+    <p>
+      skrift has two modes. insert mode is home, you open a file and start typing. escape
+      enters command mode, where single keys trigger actions. this is not vim-style
+      modality. there is no normal mode, no composition language. just typing, and a
+      small set of commands behind one key.
+    </p>
+
+    <dl>
+      <dt>insert mode (default)</dt>
+      <dd>
+        typing inserts characters at the cursor. backspace deletes backward.
+        <kbd>ctrl-d</kbd> deletes the character under the cursor (forward delete,
+        same as command-mode <code>x</code>). enter inserts a newline. tab advances
+        to the next 4-column stop. arrow keys move in any direction, left and
+        right within a line, up and down between lines (preserving the remembered
+        column so vertical movement feels natural). escape enters command mode.
+      </dd>
+      <dt>command mode</dt>
+      <dd>
+        <code>i</code> returns to insert mode. <code>h</code> shows a key reference
+        in the status bar. <code>q</code> quits and saves the
+        buffer back to jakel. <code>x</code> deletes the character under the cursor.
+        <code>dd</code> (press <code>d</code> twice) deletes the entire current line.
+        <code>cc</code> (press <code>c</code> twice) changes (deletes) the current line
+        and enters insert mode. <code>cw</code> (<code>c</code> then <code>w</code>)
+        changes from the cursor to the end of the current word and enters insert mode.
+        <code>yy</code> (press <code>y</code> twice) copies (yanks) the current line.
+        any of <code>dd</code>, <code>yy</code>, or <code>cc</code> can be prefixed
+        with a digit count, so <code>3dd</code> deletes three lines, <code>5yy</code>
+        yanks five lines. the same digit accumulator that powers <code>5G</code>
+        (go to line 5) now also feeds repeat counts.
+        <code>u</code> undoes the last buffer modification, whether an insert, a deletion,
+        a paste, or a change operation. undo is single-level, so pressing <code>u</code> again
+        does not redo. any new modification after undo saves a fresh undo state.
+        <code>gg</code> (press <code>g</code> twice) jumps to the first line.
+        <code>G</code> jumps to the last line, or, with a digit prefix, to a
+        specific line (<code>5G</code> goes to line 5). <code>e</code> evaluates the
+        current line as a c0 expression through the repl and shows the result in the
+        status bar. <code>E</code> (shift-e) does the same but inserts the result as
+        a <code>// => N</code> comment on the next line. <code>r</code> runs every
+        line in the buffer through the repl interpreter. output scrolls in the
+        editor window, with a <code>ran N ln</code> summary afterward.
+        <code>escape</code> also returns to insert mode. arrow keys
+        still move the cursor.
+      </dd>
+    </dl>
+
+    <h2>ctrl chords</h2>
+    <p>
+      ctrl chords work in both modes. <kbd>ctrl-a</kbd> jumps to the start of the
+      current line. <kbd>ctrl-e</kbd> jumps to the end. <kbd>ctrl-k</kbd> kills
+      (deletes) everything from the cursor to the end of the line, or, if the
+      cursor is already at the end, kills the newline to merge with the next line.
+      <kbd>ctrl-d</kbd> deletes the character under the cursor (forward delete).
+      the keyboard handler tracks the left ctrl key (scancode <code>0x1D</code>) as
+      a held-state modifier, exactly like shift and alt.
+    </p>
+
+    <h2>how it works</h2>
+    <p>
+      the editor runs directly in the keyboard interrupt handler, the same context
+      that echoes keystrokes to the screen when the shell is active. when skrift is
+      active the keyboard handler routes every keypress to it instead of echoing and
+      enqueuing for the shell. this is the same pattern skalman v1 used before it
+      became a scheduled task.
+    </p>
+    <p>
+      the buffer is one flat, fixed-size heap allocation. inserting a character shifts
+      every byte after the cursor right by one position and deleting shifts them left.
+      this is the simplest possible buffer and it is fast enough for files of a few
+      thousand lines. the use case is writing c0 source code for the repl's
+      compile-and-execute mode, not editing a novel. a gap buffer or piece table can
+      replace it later when the profile demands it.
+    </p>
+    <p>
+      rendering is a full redraw on every keystroke. it clears the window, walks the buffer
+      line by line, draws each character into the visible viewport, draws a status bar
+      at the bottom and draws an inverted-colour cell at the cursor position. the
+      cursor is a full-cell invert (the character under the cursor is drawn in the
+      window's background colour on a bright foreground background) rather than
+      punkt's underline, because an editor cursor should be unambiguous.
+    </p>
+    <p>
+      file i/o is simple. <code>skrift_start</code> reads the file from jakel through
+      the normal path-resolution and read apis. <code>skrift_quit</code> writes the
+      buffer back, creating the file if it does not exist. saving does not call
+      <code>jakel_sync</code>, because disk i/o is too slow for interrupt context, so the
+      user runs <code>sync</code> from the shell after quitting, the same pattern as
+      the shell's own <code>write</code> builtin.
+    </p>
+
+    <h2>status bar</h2>
+    <p>
+      the bottom row of the editor window shows the current mode, the filename, a
+      <code>*</code> when the buffer has unsaved changes, the cursor's line and
+      column (1-indexed), and the available commands for the current mode. in insert
+      mode the right-hand hint reads <code>esc:cmd</code> and in command mode it
+      shows <code>c:chg dd:del y:yank</code> and so on. pressing <code>h</code> overlays a full key reference.
+    </p>
+
+    <h2>arrow keys</h2>
+    <p>
+      the ps/2 keyboard sends arrow keys as two-byte sequences, an
+      <code>0xE0</code> prefix byte followed by the arrow's scancode. the keyboard
+      handler gained an <code>e0_prefix</code> flag that captures this. when
+      <code>0xE0</code> arrives it sets the flag and returns from the interrupt after
+      acknowledging the pic. the next interrupt picks up the flag and passes it to the
+      active key consumer. the editor maps the four arrow make codes, up (72), left
+      (75), right (77), and down (80), to cursor movement.
+    </p>
+
+    <h2>visual selection</h2>
+    <p>
+      hold <kbd>shift</kbd> while pressing arrow keys to select text. the selection
+      spans from the anchor (where shift was first held) to the cursor. selected
+      characters are drawn with inverted colours, the same visual as the editor
+      cursor, so the selection is immediately obvious. releasing shift and pressing
+      an arrow key clears the selection. the selection survives mode switches (escape
+      to toggle between insert and command mode) so you can select in insert mode and
+      operate in command mode.
+    </p>
+    <p>
+      once a region is selected, operating on it works as you would expect.
+    </p>
+    <dl>
+      <dt><code>d</code> in command mode</dt>
+      <dd>deletes the selection. if no selection is active, <code>d</code> pends for
+      <code>dd</code> (delete current line) as before.</dd>
+      <dt><code>y</code> in command mode</dt>
+      <dd>copies (yanks) the selection into the yank buffer. without a selection,
+      <code>y</code> pends for <code>yy</code> (yank current line).</dd>
+      <dt><code>x</code> in command mode</dt>
+      <dd>deletes the selection. without a selection, deletes the character under the
+      cursor.</dd>
+      <dt><code>e</code> in command mode</dt>
+      <dd>evaluates the selected text as a c0 expression through the repl and shows the
+      result in the status bar. without a selection, evaluates the current line.</dd>
+      <dt>typing in insert mode</dt>
+      <dd>any printable character, enter, backspace, or tab deletes the selection first
+      and then performs the normal action. this is type-to-replace, the way every modern editor
+      works. <kbd>ctrl-k</kbd> and <kbd>ctrl-d</kbd> also delete the selection when one
+      is active.</dd>
+    </dl>
+    <p>
+      the status bar shows <code>sel:N</code> when a selection is active, where N is the
+      number of selected bytes. the keyboard handler passes the shift held-state to the
+      editor as a fifth argument alongside the make code, ascii, e0 flag, and ctrl flag
+      it was already passing.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+        <li><a href="../kakel/index.html">kakel</a></li>
+        <li><a href="../jakel/index.html">jakel</a></li>
+        <li><a href="../skalman/index.html">skalman</a></li>
+        <li><a href="../punkt/index.html">punkt</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

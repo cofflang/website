@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · knekt</title>
+<meta name="description" content="knekt: the kernel in the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>knekt</h1>
+      <p class="article-meta">the kernel</p>
+    </header>
+
+    <p>
+      knekt is the kernel core. most of what the kernel does lives in the named parts around it, and knekt is the piece that wires them together.
+    </p>
+
+    <h2>hand-off</h2>
+    <p>
+      GRUB boots the kernel through Multiboot and lands in a short piece of hand-written
+      assembly, which sets up just enough of the machine to call
+      <a class="int" href="../c0/index.html">c0</a> code, then calls knekt's <code>main</code>. the
+      two sides cannot call each other by name. c0 has no way to reference an
+      externally-defined assembly symbol, and <code>main</code> takes no
+      parameters.<span class="sn"><label class="sn-marker" for="sn-slots">†</label><input type="checkbox" id="sn-slots" class="sn-toggle"><span class="sidenote">so the Multiboot info pointer GRUB leaves in a register does not arrive as an argument, the assembly stashes it at a fixed address as its very first instruction, and c0 reads it back from that literal address.</span></span>
+      everything they exchange goes through fixed memory slots, pinned by the
+      linker. the assembly writes the addresses of its interrupt stubs into known slots
+      for c0 to read, and c0 writes back the addresses of the structures it builds (the
+      interrupt table, the page tables) for the assembly to load.
+      linker-defined symbols such as the scratch buffer, the interrupt descriptor table
+      and the dispatch table are resolved through c0's <code>extern</code>
+      declarations, so a rebuild never needs an address patched by hand.
+    </p>
+
+    <h2>bring-up</h2>
+    <p>
+      <code>main</code> wakes the machine a piece at a time.
+      first the framebuffer is probed (<a class="int" href="../punkt/index.html">punkt</a>), with VGA <!-- TODO: Break link -->
+      text as the fallback, then the keyboard's scancode tables, then
+      <a class="int" href="../jenna/index.html">jenna</a> comes up in stages, the physical page <!-- TODO: Break link -->
+      allocator from the bootloader's memory map, the kernel heap on top of it, and
+      finally page tables the kernel builds for itself. last, <code>main</code> fills the
+      interrupt table and programs the timer, and returns to the assembly, which switches
+      to the new page tables, loads the table, and enables interrupts. only then does the
+      kernel draw its first pixels, tile the screen into windows
+      (<a class="int" href="../kakel/index.html">kakel</a>), and start a shell in each of them <!-- TODO: Break link -->
+      (<a class="int" href="../skalman/index.html">skalman</a>) along with the scheduler <!-- TODO: Break link -->
+      (<a class="int" href="../chrone/index.html">chrone</a>), and brings up the
+      in-memory filesystem (<a class="int" href="../jakel/index.html">jakel</a>). <!-- TODO: Break link -->
+    </p>
+
+    <h2>everything is bytes</h2>
+    <p>
+      c0 can read and write memory one byte or eight bytes at a time, and nothing else.
+      knekt supplies the helpers that bridge the gap, a 32-bit little-endian read
+      reassembled from four bytes (Multiboot's info structure is all 32-bit fields), and
+      16- and 32-bit writes for building interrupt table entries. they are plain c0
+      functions.<span class="sn"><label class="sn-marker" for="sn-nobit">†</label><input type="checkbox" id="sn-nobit" class="sn-toggle"><span class="sidenote">c0 has no bitwise operators, so "the low byte" is spelled <code>v - (v / 256) * 256</code>. the same divide-and-remainder idiom recurs anywhere the kernel needs a bit or a field out of a word.</span></span>
+    </p>
+
+    <h2>when things go wrong</h2>
+    <p>
+      every CPU exception vector is installed. the page fault handler recovers, demand-mapping the missing page and letting the
+      faulting instruction retry (that is jenna's demand paging). the rest share a single
+      panic handler that prints the vector, the error code, the faulting address, and the
+      instruction pointer (RIP) over serial, then halts the CPU. the double fault, the exception that fires when the
+      exception path itself is broken, gets a dedicated stack of its
+      own,<span class="sn"><label class="sn-marker" for="sn-df">†</label><input type="checkbox" id="sn-df" class="sn-toggle"><span class="sidenote">a double fault usually means the interrupted stack is unusable. handling it on that same stack would fault again, and a triple fault silently resets the machine. the dedicated stack is what turns that reset into a readable panic.</span></span>
+      so even a wrecked stack ends in a readable message rather than a silent reboot.
+    </p>
+
+    <h2>ring 3</h2>
+    <p>
+      user programs run in ring 3 and talk to the kernel through the
+      <code>syscall</code> instruction. the gdt has seven entries, which are
+      null, kernel code, kernel data, the task-state segment (tss, which takes
+      two), user data and user code. the star, lstar and sfmask msrs are set
+      up at boot and efer.sce is enabled, so <code>syscall</code> and
+      <code>sysretq</code> are valid instructions.
+    </p>
+    <p>
+      two hand-written assembly trampolines live in a dedicated
+      <code>.ring3_text</code> section. <code>syscall_entry</code> is the
+      target of lstar. its first act is to switch to the calling task's own
+      kernel stack, the one the tss rsp0 field points at, because unlike an
+      interrupt gate <code>syscall</code> does not switch stacks on its
+      own.<span class="sn"><label class="sn-marker" for="sn-sysstack">†</label><input type="checkbox" id="sn-sysstack" class="sn-toggle"><span class="sidenote">no register is free to carry the user's stack pointer across that switch, every one of them is either syscall abi data or callee-saved, so it goes through a scratch memory slot and is pushed onto the new stack in the very next instruction, before anything else can run.</span></span>
+      it then saves the ring-3 registers, marshals the syscall abi's argument
+      registers into the sysv calling convention, calls
+      <code>sys_dispatch</code> in c0, which switches on the syscall number
+      and runs the matching call from the table below, then restores
+      everything and does <code>sysretq</code> back to ring 3.
+      <code>enter_ring3</code> is how a process starts. it stores the task's
+      kernel stack top in tss rsp0, loads the process's own page-table root
+      into cr3 and builds an <code>iretq</code> frame with the user selectors,
+      the entry point and the user stack, then executes it.
+    </p>
+    <p>
+      every ring-3 process gets its own page-table root
+      (see <a class="int" href="../jenna/index.html">jenna</a>) rather than a
+      slice of the kernel's identity map, its own kernel stack and its own
+      slot in the scheduler's per-task tables. programs arrive as elf64
+      executables, usually read out of
+      <a class="int" href="../jakel/index.html">jakel</a>. the loader checks
+      the header (64-bit, little-endian, x86-64, statically linked) and maps
+      the <code>pt_load</code> segments into the private address space, and
+      nothing else. there are no relocations, no shared libraries and no
+      section headers, since a static executable does not need any of them.
+      the user stack page is placed right after the highest loaded segment
+      and a fixed-size heap region is mapped eagerly after that for
+      <code>SYS_ALLOC</code> to hand out. a tiny hand-built flat binary,
+      a few instructions and a string assembled in the kernel's scratch
+      buffer, is kept around as a smoke test of the same path.
+    </p>
+    <h2>gnista syscalls</h2>
+    <p>
+      beyond exit and debug print, the ring-3 syscall surface is the set of
+      calls <a class="int" href="../gnista/index.html">gnista</a>, the game
+      engine, runs on.
+    </p>
+    <table class="compact">
+      <thead><tr><th>num</th><th>name</th><th>args</th><th>returns</th></tr></thead>
+      <tbody>
+        <tr><td>2</td><td><code>SYS_WIN_INFO</code></td><td>none</td><td><code>width * 65536 + height</code></td></tr>
+        <tr><td>3</td><td><code>SYS_FILL</code></td><td>x, y, w, h, color</td><td>none</td></tr>
+        <tr><td>4</td><td><code>SYS_KEY_POLL</code></td><td>none</td><td><code>make_code * 2 + is_break</code> or -1</td></tr>
+        <tr><td>5</td><td><code>SYS_BLIT</code></td><td>buf, x, y, w, h</td><td>none</td></tr>
+        <tr><td>6</td><td><code>SYS_ALLOC</code></td><td>size</td><td>address, or 0 if exhausted</td></tr>
+        <tr><td>7</td><td><code>SYS_TICKS</code></td><td>none</td><td>the kernel's monotonic ~100hz pit tick count</td></tr>
+        <tr><td>8</td><td><code>SYS_READFILE</code></td><td>name, buf, max</td><td>bytes read, or the size when <code>buf</code> is 0, or -1</td></tr>
+        <tr><td>9</td><td><code>SYS_PRESENT</code></td><td>buf</td><td>0, or -1 with no window</td></tr>
+        <tr><td>10</td><td><code>SYS_WIN_MAX</code></td><td>none</td><td><code>width * 65536 + height</code></td></tr>
+      </tbody>
+    </table>
+    <p>
+      <code>SYS_FILL</code> fills a rectangle in the task's own kakel window
+      with a 32-bit RRGGBB colour, clipping to window bounds and framebuffer
+      edges. <code>SYS_KEY_POLL</code> drains a ring buffer that the
+      keyboard isr pushes every make and break into, independently of the
+      shell's line-buffered input path, so a ring-3 game can poll for raw key
+      events while the shell still receives its own keystrokes. there is one
+      such ring per task rather than one for the whole system, and the section on
+      routing below is about why.
+      <code>SYS_BLIT</code> copies a caller-owned buffer of raw bgr0 pixels
+      into the task's window in one call, so a multi-step draw (erase, draw,
+      overlay) can be composited locally and presented atomically, rather
+      than torn by a task switch landing between several separate draw
+      calls. <code>SYS_ALLOC</code> hands each ring-3 process its own
+      fixed-size heap, bump-allocated, no free, a game process's heap lives and
+      dies with the process. <code>SYS_TICKS</code> gives a ring-3 program
+      real elapsed time to drive frame-rate-independent movement and
+      animation, instead of tying speed to raw loop-iteration speed.
+      <code>SYS_READFILE</code> is what lets a ring-3 program load an asset
+      at run time rather than having every sprite baked into the executable
+      by a host script, where changing one pixel means a rebuild. calling it
+      with a null buffer
+      returns the file's size rather than copying anything, which is how a
+      program sizes its <code>alloc()</code> first, which is why there is no
+      separate stat call. it is also the only one of these that WRITES
+      through a caller-supplied pointer rather than merely reading one, so
+      unlike the others it checks that the buffer really is a user address.
+      that is not a security model, ring 3 has none here yet, it is just refusing the one
+      operation that could have the kernel scribble over itself.
+    </p>
+    <p>
+      <code>SYS_PRESENT</code> is <code>SYS_BLIT</code>'s opposite number, for
+      programs that redraw everything. a scrolling camera changes every pixel
+      when it moves, and blit's per-pixel work then becomes the frame budget.
+      it rebuilds each pixel from four bytes, tests it against colour 0 so
+      sprites can have holes, and writes it through a chain that bottoms out
+      in four single-byte stores, with divisions on the way. call it eight
+      memory accesses and ten arithmetic operations per pixel. present does
+      none of that, it copies whole rows, eight bytes at a time, no per-pixel branch
+      and no arithmetic at all. it can, because a full-window present has no
+      transparency to honour, every pixel being replaced anyway, and because
+      kakel's geometry is cell aligned, so a row is always a whole number of
+      8-byte groups. that is the same alignment argument kakel's own scroll
+      already leans on.
+    </p>
+    <p>
+      the subtle part is which pitch it reads the caller's buffer at. it uses
+      the buffer's own geometry, meaning whatever <code>SYS_WIN_INFO</code>
+      last reported to that task, not the window's size today. those are the
+      same number right up until the layout reflows underneath a running
+      program, which happens on every split, close and windowed spawn. reading
+      at the window's pitch instead would be wrong in both directions, a
+      wider window would read each source row past its end into the start of
+      the next and eventually off the mapped part of the heap, and a narrower
+      one would read rows short and shear the image diagonally. reading at the
+      buffer's own pitch and copying the overlap of the two rectangles keeps
+      the picture intact and correctly shaped. it simply does not fill a
+      window that has grown, or shows only the top-left corner of one that
+      has shrunk. wrong size, right picture, which is a much better failure
+      than a page fault.
+    </p>
+    <p>
+      <code>SYS_WIN_MAX</code> is what lets a program stop being wrong-sized
+      at all, and it exists because of a constraint two syscalls up the table.
+      <code>SYS_ALLOC</code> is bump-only with no free, so a program cannot
+      grow its frame buffer when its window grows. so it does not try. it asks
+      once for the largest window this machine can ever hand out, the full
+      framebuffer minus the status bar, allocates for that worst case, and
+      renders a sub-rectangle. the distinction from <code>SYS_WIN_INFO</code>
+      is the whole point. win_info is a measurement and changes on every
+      reflow, win_max is a ceiling and never does. one is what you draw, the
+      other is what you budget for. it is on purpose not reduced by a
+      tavla's title inset, because that inset only makes a window smaller and
+      a program that budgeted for the un-inset size is still correct.
+    </p>
+    <p>
+      matching builtins (<code>win_info()</code>, <code>fill()</code>,
+      <code>key_poll()</code>, <code>blit()</code>, <code>alloc()</code>,
+      <code>ticks()</code>, <code>readfile()</code>, <code>present()</code>,
+      <code>win_max()</code>) are available in coff's
+      <code>--elf</code> mode, which is how
+      <a class="int" href="../gnista/index.html">gnista</a> reaches them.
+    </p>
+    <p>
+      all three of the drawing calls translate window-relative coordinates
+      into absolute screen ones, which means they need the size of a
+      character cell, and they take it from
+      <a class="int" href="../punkt/index.html">punkt</a>'s font constants
+      rather than carrying a literal of their own.
+    </p>
+
+    <h2>where a keystroke goes</h2>
+    <p>
+      one keyboard, one interrupt, and several things that all reasonably
+      want the keys, the shell, a text editor, a pixel editor and any number
+      of graphical programs in their own windows. deciding where a keystroke
+      goes is two separate questions. the first is whether the shell should
+      act on a key, and that is settled by focus. the second is whether a
+      ring-3 program should see it, and that has to be asked separately,
+      because a program does not go through the focus path at all. it reads
+      its poll ring directly, so if the isr pushed to that ring
+      unconditionally, typing at a focused shell would also drive the game in
+      the window next to it. the isr therefore pushes only when a
+      <a class="int" href="../kakel/index.html">tavla</a> holds focus, and
+      only to that window's owning task.
+    </p>
+    <p>
+      there is one ring per task slot, carved out of a single allocation and
+      indexed by task id, the same shape the window table and the per-process
+      heaps have. a single shared ring would be fine exactly as long as one
+      graphical program ran at a time, and the moment two could, whichever
+      one polled first would drain events meant for the other. input is that
+      kind of resource too.
+    </p>
+    <p>
+      two smaller decisions inside the ring are worth recording. the ring is
+      deep, because a game tracking keys as held state treats a dropped
+      release as a key that never came back up, so the player walks off on
+      their own until the direction is pressed and released again, and a
+      program descheduled for a moment can easily bank more events than a
+      small ring holds. and when a full ring has to discard something it
+      discards the <em>newest</em> event rather than the oldest. a program
+      that is not draining is already behind, and throwing away what it has
+      not seen yet desynchronises make and break pairs worse than refusing
+      the new one. the ring is also cleared when a task slot is reused, so a
+      fresh process never inherits keystrokes typed at whatever ran there
+      before it.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+	    <h2>related</h2> <!-- TODO: Break links -->
+      <ul>
+      <li><a href="../c0/index.html">c0</a></li>
+      <li><a href="../coff/index.html">coff</a></li>
+      <li><a href="../jenna/index.html">jenna</a></li>
+      <li><a href="../chrone/index.html">chrone</a></li>
+      <li><a href="../punkt/index.html">punkt</a></li>
+      <li><a href="../kakel/index.html">kakel</a></li>
+      <li><a href="../skalman/index.html">skalman</a></li>
+      <li><span class="wip" title="documentation not yet published">raket</span></li>
+      <li><a href="../jakel/index.html">jakel</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

@@ -1,9 +1,6 @@
 # working notes, not for publication
 feedback.txt
 
-# moonshot operating-system documentation — withheld until reviewed by hand
-technical/knekt/
-technical/jenna/
-technical/chrone/
-technical/punkt/
-technical/skalman/
+# moonshot documentation still being updated, held back until the next release
+technical/klick/
+technical/raket/

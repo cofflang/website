@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · 0.1.0 "Quiet Boye"</title>
+<meta name="description" content="the first release of the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html">technical</a>
+    <a href="../../blog/index.html" class="here" aria-current="page">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">blog</a></p>
+      <h1>0.1.0 &ldquo;quiet boye&rdquo;</h1>
+      <p class="article-meta"><time datetime="2026-08-03">2026-08-03</time></p>
+    </header>
+
+    <p>
+      the first release of moonshot is out. i tagged it a few hours ago and
+      pushed it to its own repository. it is called quiet boye.
+      calling it a release is a way of saying this checkpoint is frozen and
+      clean and someone who was not me could clone it and boot it and the tests
+      would pass. that was not true two days ago. there were dead comments
+      everywhere, a few pieces of dead code i had walked past for weeks, and a
+      grep pattern in the main test script that only matched the second boot
+      onward, so a completely fresh checkout would fail the first time you ran
+      it. all of that is fixed now.
+    </p>
+
+    <h2>what is in it</h2>
+
+    <p>
+      the kernel boots through Multiboot and GRUB under QEMU on x86_64. it draws
+      to a linear pixel framebuffer with its own hand-drawn bitmap
+      font,<span class="sn"><label class="sn-marker" for="sn-font">†</label><input type="checkbox" id="sn-font" class="sn-toggle"><span class="sidenote">the font covers printable ASCII and a handful of box-drawing glyphs, 128 characters total.</span></span>
+      rendered by <a class="int" href="../../technical/punkt/index.html">punkt</a>.
+      on top of that sits
+      <a class="int" href="../../technical/kakel/index.html">kakel</a>, a tiled
+      windowing layer that can split the screen into independently scrolling
+      windows, each with its own shell session. the shell,
+      <a class="int" href="../../technical/skalman/index.html">skalman</a>, has
+      tab completion, command history, arrow-key line editing, and over twenty
+      builtin commands.
+    </p>
+
+    <p>
+      there is a text editor built into the kernel.
+      <a class="int" href="../../technical/skrift/index.html">skrift</a> has
+      syntax highlighting for c0, visual selection, yank and paste, forward
+      search, undo, and a command mode with vi-like movement keys. it can run c0
+      expressions inline through the REPL and insert the results into the buffer
+      as comments. i did not set out to build an editor. it happened because the
+      shell needed a way to edit files, and one thing led to another.
+    </p>
+
+    <p>
+      the REPL, backed by a hand-written x86-64 JIT compiler, compiles c0
+      expressions to native machine code at runtime into an identity-mapped page
+      with W^X toggling. it handles arithmetic, comparisons, variables,
+      assignment, print, and control flow (if/else, while, for, break,
+      continue). the JIT page is never simultaneously writable and executable,
+      which is more than i expected to care about this early.
+    </p>
+
+    <p>
+      underneath, the kernel does preemptive multitasking through
+      <a class="int" href="../../technical/chrone/index.html">chrone</a>, a
+      round-robin scheduler driven by the PIT timer. memory is managed by
+      <a class="int" href="../../technical/jenna/index.html">jenna</a>, which
+      handles physical page allocation with LIFO reuse, four-level paging with
+      demand-paging recovery, and a coalescing kernel heap. the filesystem,
+      <a class="int" href="../../technical/jakel/index.html">jakel</a>, is an
+      in-memory tree that persists to an ATA disk image and survives a reboot,
+      with per-file owner and mode permissions and a multi-user login system.
+    </p>
+
+    <p>
+      ring-3 userspace is wired up and working. the GDT has user-code and
+      user-data descriptors, the TSS holds a known-safe RSP0, EFER.SCE is
+      enabled, and the LSTAR MSR points at a syscall entry trampoline. a test
+      binary built in kscratch drops to ring 3, makes a syscall that writes to
+      the framebuffer, and exits cleanly. it is a toy right now, but the whole
+      path from userspace through the syscall handler and back is real and the
+      tests catch regressions in it.
+    </p>
+
+    <p>
+      the repository is at
+      <a href="https://github.com/cofflang/moonshot">github.com/cofflang/moonshot</a>.
+      the <a href="../../releases/index.html">releases</a> page has the
+      download and boot instructions.
+    </p>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

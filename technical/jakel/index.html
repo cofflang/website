@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · jakel</title>
+<meta name="description" content="jakel, the in-memory filesystem of the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>jakel</h1>
+      <p class="article-meta">the filesystem</p>
+    </header>
+
+    <p>
+      jakel is the filesystem. files and directories are stored in the same parallel-array table the
+      rest of the kernel uses for tasks and windows. an <span class="wip">ata pio driver</span>
+      underneath persists the entire filesystem to a raw disk image, so files survive reboots.
+    </p>
+
+    <h2>nodes</h2>
+    <p>
+      every file and directory is a node in a fixed-size table. each node has a type
+      (file or directory), a name, a parent id, a size, and a pointer to a heap buffer. for files
+      the buffer holds raw bytes. for directories it holds an array of child node ids. the root
+      directory is node zero, and it is its own parent.
+    </p>
+    <p>
+      directory children are stored as a contiguous array of 8-byte ids that grows on each add. a
+      new buffer is allocated, the old children copied in, the new one appended, and the old buffer
+      freed. the same allocate-copy-free pattern handles extending files on write.
+    </p>
+
+    <h2>paths</h2>
+    <p>
+      paths are slash-separated. an absolute path starts with <code>/</code> and resolves from the
+      root. anything else resolves from the current working directory, which starts at the root and
+      stays there until <code>change</code> moves it. <code>..</code> goes up one level and there
+      is no <code>.</code> yet. path resolution walks one component at a time, looking each up in the
+      current directory's child table. if a non-directory appears before the last component the
+      path is rejected.
+    </p>
+
+    <h2>api</h2>
+    <p>
+      the low-level interface is available to any kernel code, not just the shell.
+    </p>
+    <ul>
+      <li><code>jakel_mkdir(parent, name)</code> create a directory</li>
+      <li><code>jakel_make_file(parent, name)</code> create an empty file</li>
+      <li><code>jakel_remove(id)</code> delete a node (directories must be empty)</li>
+      <li><code>jakel_lookup(parent, name)</code> find a child by name, returns id or -1</li>
+      <li><code>jakel_open(parent, path)</code> resolve a path string, returns node id</li>
+      <li><code>jakel_read(id, offset, buf, len)</code> read bytes from a file</li>
+      <li><code>jakel_write(id, offset, buf, len)</code> write bytes, extending the file if needed</li>
+    </ul>
+
+    <h2>shell</h2>
+    <p>
+      <a class="int" href="../skalman/index.html">skalman</a> gained four builtins that drive jakel.
+    </p>
+    <ul>
+      <li><code>list</code> show the current directory's contents</li>
+      <li><code>list /some/path</code> show a specific directory</li>
+      <li><code>change /some/path</code> change the current working directory</li>
+      <li><code>change ..</code> go up one level</li>
+      <li><code>where</code> print the full path of the current directory</li>
+      <li><code>make readme.txt</code> create an empty file</li>
+      <li><code>make projects</code> create an empty directory</li>
+      <li><code>make projects/readme.txt</code> nested paths create intermediate directories</li>
+      <li><code>remove readme.txt</code> delete a file or empty directory</li>
+      <li><code>echo --file readme.txt</code> print a file's contents to the console</li>
+      <li><code>write readme.txt hello world</code> write text into a file</li>
+      <li><code>sync</code> persist all files to disk</li>
+    </ul>
+
+    <h2>disk persistence</h2>
+    <p>
+      the filesystem can be written to and loaded from an <span class="wip">ata</span> disk.
+      <code>jakel_sync</code> serialises the entire state (a superblock, a node table with
+      inline names, and raw file data) into 512-byte sectors on the disk.
+      <code>jakel_load</code> reads it back at boot and reconstructs the in-memory tree.
+      directory children are not serialised, they are rebuilt from parent pointers on load,
+      which is simpler and harder to get wrong. the <code>sync</code> shell command triggers a manual
+      flush, and the initial fresh filesystem is auto-synced so the second boot always loads
+      from disk.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+      <li><a href="../skalman/index.html">skalman</a></li>
+      <li><a href="../knekt/index.html">knekt</a></li>
+      <li><a href="../jenna/index.html">jenna</a></li>
+      <li><a href="../c0/index.html">c0</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

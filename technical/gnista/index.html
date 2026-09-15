@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · gnista</title>
+<meta name="description" content="gnista, a game engine written in c0, running as a windowed ring-3 process on moonshot.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>gnista</h1>
+      <p class="article-meta">a game engine, written in c0, running on moonshot</p>
+    </header>
+
+    <p>
+      gnista<span class="sn"><label class="sn-marker" for="sn-name">†</label><input type="checkbox" id="sn-name" class="sn-toggle"><span class="sidenote">swedish for "spark".</span></span>
+      is a game engine built from scratch in <a class="int" href="../c0/index.html">c0</a>,
+      compiled by <a class="int" href="../coff/index.html">coff</a> to a real ELF64
+      binary and run as a windowed ring-3 process on moonshot. it is not a
+      prototype meant to be rewritten later, the engine and moonshot are grown
+      together, each real limitation the engine hits becomes a real fix in
+      the kernel or the compiler.
+    </p>
+
+    <h2>entities and the pool</h2>
+    <p>
+      an entity is a <code>layout</code>, a position, a size, a velocity, a
+      game-defined kind and a handful of game-defined scratch fields, and the
+      engine only ever reads one of them itself, the <code>alive</code> flag.
+      entities live in a pool, which is one allocation and a multiply. c0 has
+      no arrays and no pointer types, so an entity reference is just the
+      address of its record, which is exactly what <code>layout</code> field
+      access already expects, and iterating is a loop over indices. the pool
+      is allocated once at startup, because the ring-3 heap is bump-only with
+      no free, so anything allocated per frame would exhaust it within
+      seconds. slots are recycled for the same reason. <code>pool_spawn</code>
+      hands back the first free slot, or zero when there is none, and a game
+      that spawns on a timer will hit a full pool eventually, which is normal
+      rather than an error. without reuse a long game would exhaust the heap
+      no matter how large it is.
+    </p>
+    <p>
+      a static block is not a separate kind of thing. it is an ordinary pool
+      member with a flag saying it never moves, so one collision routine and
+      one drawing routine cover everything. <code>aabb_hit</code> tests any
+      two entities for axis-aligned overlap, and touching edges do not count,
+      since two things resting exactly against each other would otherwise
+      report colliding forever. next to it sit <code>centre_inside</code>,
+      which asks whether one entity's middle is inside another, because
+      clipping the corner of a cell should not count as being in it, and a
+      squared centre distance, squared because c0 has no square root and a
+      comparison against a squared threshold works just as well.
+    </p>
+    <p>
+      collision resolution reverses only the axis of <em>shallowest</em>
+      penetration, not both. reversing both means a glancing corner hit sends
+      an entity back the way it came on both axes, which reads as entities
+      sticking together. the entity is also pushed back out along that axis,
+      because two things still overlapping on the next frame collide again,
+      reverse again and vibrate in place instead of separating.
+    </p>
+
+    <h2>one atomic present</h2>
+    <p>
+      each draw syscall (<code>fill</code>, <code>blit</code>,
+      <code>present</code>) is atomic on its own,<span class="sn"><label class="sn-marker" for="sn-atomic">†</label><input type="checkbox" id="sn-atomic" class="sn-toggle"><span class="sidenote">the syscall instruction clears the interrupt flag for the duration of a single syscall, so one call cannot itself be preempted mid-flight.</span></span>
+      but a redraw made of several separate calls in a row is not atomic
+      <em>across</em> those calls. moonshot's scheduler can and does switch to
+      another task in the gap between two syscalls, so a multi-call draw
+      sequence can be visibly torn by a task switch landing mid-sequence, and
+      a continuously moving sprite hits that gap constantly. so nothing in
+      gnista draws straight to the window. every visible change is composited
+      into a local buffer first and handed over in exactly one call, which
+      makes it atomic regardless of what the scheduler does around it.
+    </p>
+    <p>
+      there are two renderers built on that rule, and they are kept separate
+      because they suit different games. when the view never moves, the cheap
+      thing is to redraw only the bounding box of each entity's old and new
+      position with a single <code>blit</code>. that box paints background
+      over whatever was there, so it is composed with <em>every</em> entity
+      that intersects it, not just the one being presented, or an entity
+      sitting inside another's box would vanish until its own turn came
+      round. the box also has to stay bounded. c0 has no optimizer, so the
+      per-pixel compositing loop is as expensive as it looks, and a box that
+      grows with a scheduling gap grows the work with the square of that gap.
+      the simulation step is therefore clamped so an entity can never move
+      further in one frame than the box can cover, the clamp derived from the
+      same value the buffer is sized from so the two cannot drift apart. under
+      heavy scheduling pressure a sprite moves slower in wall-clock terms
+      instead of jumping, which is the trade every engine makes under the name
+      maximum delta time, and it also means an entity cannot step straight
+      through an obstacle in one oversized move.
+    </p>
+    <p>
+      when the view moves, every pixel changes and incremental redraw saves
+      nothing, so the other renderer keeps a <code>View</code>, a whole frame
+      buffer plus a camera position, draws in world coordinates and hands the
+      finished frame over with <code>present</code> rather than
+      <code>blit</code>. <code>present</code> copies whole rows and skips the
+      per-pixel transparency test, which a full frame does not need. the
+      frame's own fills and spans write two pixels per 64-bit store rather
+      than four bytes per pixel, which is safe without a remainder check
+      because kakel's geometry is cell aligned so a row always holds an even
+      number of pixels.<span class="sn"><label class="sn-marker" for="sn-pair">†</label><input type="checkbox" id="sn-pair" class="sn-toggle"><span class="sidenote">c0 has no shift operator, so packing two pixels into one word is a multiply by 2^32. the paired writes and the row-wise present together are the difference between a frame that fits the budget and one that does not, and neither is worth much without the other.</span></span>
+      on top of that sit rectangles, circles, a software alpha blend for
+      circles, since the kernel stays out of blending by design, a bar for
+      meters and a camera follow that clamps to the world's edges, plus a
+      small linear congruential generator for anything that needs randomness.
+    </p>
+
+    <h2>surviving a resize</h2>
+    <p>
+      a kakel window is not a fixed size. every split, close and windowed
+      spawn reflows the layout, and a window a program is drawing into can
+      get wider, narrower, taller or shorter while it runs, and nothing tells
+      the program. it has to look, which is one <code>win_info</code> call per
+      frame and nothing next to a full-frame present. what a program cannot do
+      is grow its buffer, because <code>alloc</code> is bump-only, so the view
+      asks <code>win_max</code> once for the largest window the machine can
+      ever hand out, allocates for that and treats the current size as a
+      sub-rectangle of it. every renderer already reads the view's width and
+      height for its clipping and strides, so moving those two numbers is the
+      whole of the adaptation.
+    </p>
+
+    <h2>frames and time</h2>
+    <p>
+      a program only draws while it is scheduled, and moonshot's round-robin
+      scheduler hands out ticks in turn, so a frame is never drawn during the
+      time the process is not running. honest wall-clock movement and even
+      motion cannot both be had, because making up lost time after a gap
+      <em>is</em> the lurch the eye objects to. gnista chooses even motion.
+      movement is a fixed step per rendered frame with a separate speed
+      constant, so a busier system slows things down instead of making them
+      skip. animation is the exception and runs on real elapsed time from
+      <code>ticks</code>, so a sprite keeps cycling its frames at the right
+      rate whatever the scheduler is doing.
+    </p>
+
+    <h2>sprites</h2>
+    <p>
+      a sprite is a <code>layout</code> too, a width, a height, a frame count
+      and the address of the raw pixels. sprites are loaded from a file at
+      run time through <code>readfile</code>, the size query first so the
+      buffer can be sized, then one read, and the pixel field then points
+      into that buffer rather than copying it out. the file format is by
+      design the shape the layout already has, three integers then the
+      pixels, so loading is three reads and a pointer rather than a parse. the
+      file is what moonshot's own sprite editor, pensel, saves, so art can be
+      drawn on the machine and picked up by a game with no rebuild anywhere.
+      a baked-in sprite is compiled in as a fallback so a game still runs on a
+      machine where nobody has drawn anything yet, and frame advance wraps on
+      the sprite's own frame count rather than assuming a number.
+    </p>
+    <p>
+      the sprite layout's field names do not reuse the entity's, and that is
+      a rule rather than taste. field names live in one flat table shared by
+      every <code>layout</code> in a file (see
+      <a class="int" href="../c0/index.html">c0</a>), so a name reused across
+      two layouts has to land at the same offset in both, and the compiler
+      rejects it otherwise. any layout that wants a common name like
+      <code>x</code> or <code>w</code> either matches the existing offset
+      exactly or picks a different name.
+    </p>
+
+    <h2>the syscalls it runs on</h2>
+    <p>
+      gnista does not get any syscalls of its own, it runs entirely on
+      moonshot's general ring-3 surface, documented on
+      <a class="int" href="../knekt/index.html">knekt</a>, which gives it
+      window info and the window ceiling, fill, key polling, blit and
+      present, file reading, a per-process heap and a monotonic tick counter.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+        <li><a href="../c0/index.html">c0</a></li>
+        <li><a href="../coff/index.html">coff</a></li>
+        <li><a href="../knekt/index.html">knekt</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

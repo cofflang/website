@@ -26,7 +26,7 @@
     <header class="article-head">
       <p class="crumb"><a href="../index.html">technical</a></p>
       <h1>coff</h1>
-      <p class="article-meta">the self-hosted compiler for <a href="../c0/index.html">c0</a></p>
+      <p class="article-meta">the self-hosted compiler for <a class="int" href="../c0/index.html">c0</a></p>
     </header>
 
     <h2>self-hosted</h2>
@@ -75,12 +75,12 @@ include "punkt.c0";</code></pre>
     <p>
       coff is a straight pipeline. include expansion produces one flat buffer of source, a
       lexer turns it into tokens, a parser builds the program from those tokens, and code
-      generation emits x86_64 assembly, which the system assembler and linker turn into a
-      freestanding binary. there is no optimiser, the point, for now, is output that is
-      simple and easy to check.
+      generation emits x86_64 assembly. that text goes to smed, the project's own assembler
+      and linker, which turns it into a freestanding binary. there is no optimiser, the
+      point, for now, is output that is simple and easy to check.
     </p>
 
-    <div class="pipeline" role="img" aria-label="the coff pipeline: c0 source files go through include expansion into one flat buffer, the lexer turns that into tokens, the parser builds the program, code generation emits x86_64 assembly, and the system assembler and linker produce a freestanding binary.">
+    <div class="pipeline" role="img" aria-label="the coff pipeline: c0 source files go through include expansion into one flat buffer, the lexer turns that into tokens, the parser builds the program, code generation emits x86_64 assembly, and smed assembles and links it into a freestanding binary.">
       <div class="pl-io">c0 source files</div>
       <div class="pl-flow">↓</div>
       <div class="pl-stage">include expansion</div>
@@ -91,15 +91,156 @@ include "punkt.c0";</code></pre>
       <div class="pl-flow">↓ <span class="pl-what">the whole program</span></div>
       <div class="pl-stage">code generation</div>
       <div class="pl-flow">↓ <span class="pl-what">x86_64 assembly</span></div>
-      <div class="pl-stage pl-outside">system assembler and linker</div>
+      <div class="pl-stage">smed</div>
       <div class="pl-flow">↓</div>
       <div class="pl-io">freestanding binary</div>
     </div>
 
     <p>
-      the dashed stage is the one step coff does not do itself. the assembly it emits is
-      handed to the system's assembler and linker. everything above that line is coff's
-      own.
+      the last stage is smed, a single tool that both assembles and links, written in c0
+      and compiled by coff, so the whole path from source text to bytes is the project's
+      own rather than ending in the system assembler and linker. why it exists, how it
+      is built to be easy to check and how it is checked against the tools it replaced is on
+      the <a class="int" href="../trust/index.html">trust</a> page.
+    </p>
+
+    <h2><code>extern</code></h2>
+    <p>
+      an <code>extern int name;</code> declaration tells coff that the symbol is defined
+      elsewhere (by the linker, or by another compilation unit). in expression context,
+      an extern name evaluates to its address (<code>lea rax, [name]</code>). this is
+      how moonshot resolves linker-defined symbols like section boundaries without
+      hardcoded address literals.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2>limits</h2>
+    <p>
+      the compiler's internal tables have grown alongside the moonshot codebase.
+      <code>MAX_FUNCS</code>, <code>MAX_VARS</code>, the symbol-table allocation and the
+      string table have each been raised more than once as the kernel outgrew them. they
+      are compile-time constants in both <code>coff0.c</code> (the C bootstrap) and
+      <code>c0/coff.c0</code> (the self-hosted compiler), kept in lockstep and
+      verified by the bootstrap fixpoint check each time they change.
+    </p>
+
+    <div class="rule" role="separator" aria-hidden="true"></div>
+
+    <h2><code>--raw</code></h2>
+    <p>
+      pass <code>--raw</code> to bypass the assembler and linker entirely. coff emits
+      x86-64 machine code directly into a flat binary, with no assembly text and no external
+      tools. <code>coff --raw input.c0 output.bin</code>. the binary starts with a
+      <code>_start</code> entry point that calls <code>main</code> and exits with its
+      return value.
+    </p>
+    <p>
+      the raw backend walks the same ast and uses the same code generation functions as
+      the text backend. every <code>gen_*</code> function has a parallel raw-byte path,
+      which encodes instructions inline and uses a label-and-patching system for forward jumps and
+      function calls. string literals are embedded inline in the code stream with a
+      short jump-over pattern and rip-relative addressing. <code>print()</code> emits
+      an inline <code>strlen</code> loop followed by a <code>write</code> syscall.
+    </p>
+    <p>
+      the raw mode covers numeric literals, local variables, arithmetic, comparisons,
+      <code>if</code>/<code>else</code>, <code>while</code> and <code>for</code> loops
+      with <code>break</code>/<code>continue</code>, function definitions with full
+      prologues and parameter shadowing, string literals with inline embedding, general
+      function calls with the standard calling convention (up to 6 arguments), and the
+      builtins <code>load8</code>, <code>store8</code>, <code>load64</code>,
+      <code>store64</code>, <code>print</code>, and <code>exit</code>. globals,
+      indirect calls, and linux i/o builtins are deferred.
+    </p>
+
+    <h2><code>--elf</code></h2>
+    <p>
+      pass <code>--elf</code> to emit a real ELF64 executable targeting
+      <a class="int" href="../knekt/index.html">moonshot</a>'s ring-3 syscall ABI instead of linux.
+      <code>coff --elf input.c0 output.elf</code>. the output is a 64-byte ELF header, one
+      56-byte PT_LOAD program header (the whole file mapped at <code>0x80000000</code>, RX),
+      and then the same raw machine code <code>--raw</code> produces, except with
+      <code>_start</code> issuing moonshot's <code>SYS_EXIT</code> (syscall 0) and
+      <code>print()</code> issuing <code>SYS_DEBUG_PRINT</code> (syscall 1, rdi=str,
+      rsi=len) instead of linux <code>write</code>. moonshot's <code>elf_load</code> maps
+      it page by page into a per-process address space, and
+      <code>spawn3 <em>file</em>.elf</code> runs it in its own kakel window. the same
+      builtins <code>--raw</code> supports work here too, plus the ring-3 syscall
+      builtins moonshot grew for <a class="int" href="../gnista/index.html">gnista</a>, which are
+      <code>win_info</code>, <code>win_max</code>, <code>fill</code>,
+      <code>key_poll</code>, <code>blit</code>, <code>present</code>,
+      <code>readfile</code>, <code>alloc</code>, and <code>ticks</code>.
+      <code>alloc()</code> works here because each ring-3 process gets its own
+      heap from the kernel, not because moonshot grew a <code>brk</code>.
+      <code>win_info</code> and <code>win_max</code> look like a pair and are
+      not. the first is the window's size right now, which changes on every
+      layout reflow, and the second is the ceiling a program budgets its frame
+      buffer against, which never does.
+    </p>
+    <p>
+      this closes the full toolchain loop, write c0 → <code>coff --elf</code> → ELF64 →
+      moonshot's ELF loader → ring 3 in a kakel window, and it is the path
+      <a class="int" href="../gnista/index.html">gnista</a>, the game engine, is built through.
+    </p>
+
+    <h2>where the oracle does not reach</h2>
+    <p>
+      the differential oracle described above is the backbone of trusting this
+      compiler, and it has a hole worth stating plainly. <strong>coff0 implements
+      only the text backend.</strong> it has no raw mode and no
+      <code>--elf</code> mode at all. so every codegen-diff test, and the whole
+      test suite around it, exercises the path that emits assembly, and proves
+      nothing whatsoever about the path that emits machine code directly. that
+      is the same path every ring-3 program on moonshot is built through.
+    </p>
+    <p>
+      the machine-code backend also has more ways to be quietly wrong than the
+      text backend, because it resolves things itself that an assembler would
+      otherwise check. labels go through a single flat numeric table rather
+      than distinct names, so two constructs that both need a label have to
+      reserve their own, and both that table and the jump-patch table are
+      bounds-checked and fail loudly when they overflow. a
+      <code>movabs</code> carries a full eight-byte immediate and both halves
+      are written, with the high word taken as a floor division rather than
+      c0's truncate-toward-zero so negative constants come out right. builtin
+      arguments follow the <code>syscall</code> convention, where the fourth
+      argument travels in <code>r10</code> because the instruction itself
+      destroys <code>rcx</code>, and rex prefixes are chosen by which operand
+      field they extend, since <code>0x4C</code> and <code>0x49</code> both
+      assemble cleanly with the same following byte and move the data in
+      opposite directions. a compiler that silently emits wrong code is worse
+      than one that refuses, and every one of these is a place where the
+      text backend cannot go wrong and the raw backend can.
+    </p>
+
+    <h2>giving the backend an oracle of its own</h2>
+    <p>
+      the machine-code backend has a verification story, and it is on
+      purpose not a differential one, because there is nothing to be
+      differential against. instead there is a set of small programs that
+      each compute a value which only comes out right if code generation is
+      right, and return it. the expected answer sits next to the program as a
+      comment. each one is compiled with <code>--elf</code>, baked into the
+      kernel, spawned in ring 3 on real moonshot, and the exit code it reports
+      over the serial line is compared against that comment. they stay small
+      and arithmetic on purpose, because the point is that a wrong answer is
+      a compiler bug and not a kernel one.
+    </p>
+    <p>
+      what they cover is the places listed above rather than a general idea
+      of coverage. there is chained control flow, and <code>&amp;&amp;</code>
+      and <code>||</code> with real short-circuit checks, where a side effect
+      proves the right-hand side was skipped. there is argument passing
+      through all six registers, arithmetic and comparison, recursion,
+      <code>layout</code> with <code>sizeof</code> and <code>alloc()</code>
+      together, <code>readfile()</code>, nested loops with an early return
+      and <code>exit()</code> from inside them. argument passing in
+      particular is a class the differential suite cannot check even in
+      principle, since the text backend writes
+      <code>mov [rbp - N], <em>reg</em></code> as one instruction and never
+      stages the value through <code>rax</code> at all, which is the argument
+      for this suite existing.
     </p>
 
     <div class="rule" role="separator" aria-hidden="true"></div>
@@ -108,16 +249,18 @@ include "punkt.c0";</code></pre>
     <p>
       coff and the whole test suite live at
       <a href="https://github.com/cofflang/coff">github.com/cofflang/coff</a>. the
-      readme walks through bootstrapping it with nothing but a C compiler, the system
-      assembler and linker. after that first build it compiles itself. contributions
-      are welcome.
+      readme walks through bootstrapping it from nothing but a C compiler and the system
+      assembler and linker, which are needed exactly once. after that first build coff
+      compiles itself and smed assembles and links it. neither of the system tools is
+      touched again. contributions are welcome.
     </p>
 
     <nav class="related" aria-label="related documentation">
       <h2>related</h2>
       <ul>
         <li><a href="../c0/index.html">c0</a></li>
-        <li><span class="wip" title="documentation not yet published">knekt</span></li>
+        <li><a href="../trust/index.html">trust</a></li>
+        <li><a href="../knekt/index.html">knekt</a></li>
       </ul>
     </nav>
 

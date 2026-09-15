@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · jenna</title>
+<meta name="description" content="jenna: memory in the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>jenna</h1>
+      <p class="article-meta">physical and virtual memory</p>
+    </header>
+
+    <p>
+      jenna is moonshot's memory, who owns every physical page, how small allocations are
+      carved out of big ones, and the page tables that decide what the addresses the
+      kernel uses actually mean.
+    </p>
+
+    <h2>pages first</h2>
+    <p>
+      the bottom layer hands out physical memory in 4096-byte pages. at boot it walks the
+      memory map the bootloader provides and claims the first usable region past the end
+      of the kernel as its arena. allocation is a bump pointer moving through that region,
+      freeing pushes the page onto a free list, and the clever part is where the list
+      lives, in the freed pages
+      themselves.<span class="sn"><label class="sn-marker" for="sn-intrusive">†</label><input type="checkbox" id="sn-intrusive" class="sn-toggle"><span class="sidenote">a free page is by definition unused, so its own first eight bytes are free to hold the link to the next free page.</span></span>
+      an allocation pops the most recently freed page first, and only bumps the watermark
+      when the list is empty, so freed memory really is reused rather than abandoned.
+    </p>
+
+    <h2>kernel heap</h2>
+    <p>
+      whole pages are too coarse the moment something wants many small, differently-sized
+      pieces, so a heap (<code>kmalloc</code> and <code>kfree</code>) sits on top. it is a
+      contiguous arena carved from the page allocator, laid out as a packed sequence of
+      blocks, each a 16-byte header (size and a free flag) followed by its payload. there
+      are no next-pointers. the next block always sits just past the current payload, so
+      the whole heap can be walked by address. allocation is first-fit and splits
+      oversized blocks. every free coalesces adjacent free neighbours back
+      together,<span class="sn"><label class="sn-marker" for="sn-coalesce">†</label><input type="checkbox" id="sn-coalesce" class="sn-toggle"><span class="sidenote">without coalescing, repeated split-and-free would grind the heap into fragments too small to ever satisfy a larger request again.</span></span>
+      which the address-order layout makes natural, adjacency is never lost. the heap's
+      first real customers were the shell's line buffer and the scheduler's task table.
+    </p>
+
+    <h2>page tables of its own</h2>
+    <p>
+      the boot assembly starts the machine on a small, statically built memory map and jenna
+      replaces it. it builds a fresh four-level page table hierarchy entirely from frames
+      it allocated itself, mapping the memory the kernel actually runs on at 4KB
+      granularity, and hands the result over for the switch. the point is not a different
+      mapping, it is that from then on the kernel runs on tables it built dynamically,
+      which is the foundation every later memory feature needs.
+      a sentinel value is stashed in a fresh page that is also mapped at a high
+      address only the new tables know about, and reading it back through that address
+      after the switch proves the CPU is really walking jenna's tables.
+    </p>
+
+    <h2>demand paging</h2>
+    <p>
+      jenna also owns the page fault handler, and it recovers rather than panics. it
+      aligns the faulting address down to its page, backs it with a fresh zeroed frame,
+      maps it into the live tables, and returns, so the instruction that faulted simply
+      runs again and
+      succeeds.<span class="sn"><label class="sn-marker" for="sn-demand">†</label><input type="checkbox" id="sn-demand" class="sn-toggle"><span class="sidenote">the boot sequence tests this. it touches an address far outside every mapping, takes the real page fault, and checks that the read comes back with the sentinel value the handler seeds fresh pages with.</span></span>
+      a full kernel would decide map-or-kill per address, what exists today proves the
+      whole fault-and-recover path, which is the mechanism everything later (like real
+      virtual memory per process) builds on.
+    </p>
+
+    <h2>a private table per process</h2>
+    <p>
+      every ring-3 process runs on page tables of its own. running them all on the
+      kernel's identity-mapped tables with a few pages flipped to user-accessible would
+      have two processes collide in the same address space, sharing memory neither one
+      asked to share. <code>pt_create</code> gives each process its own page-table root, a shallow
+      copy of the kernel's top-level entries, so the identity map, the heap, and every
+      fixed kernel structure stay reachable without re-walking a single frame, and a
+      private carve-out for one specific range every process maps its own code and stack
+      into.<span class="sn"><label class="sn-marker" for="sn-carveout">†</label><input type="checkbox" id="sn-carveout" class="sn-toggle"><span class="sidenote">that range has to sit below 4GB, because the address gets encoded as a 32-bit immediate in the process's own machine code, which put it inside the same 512GB top-level slot the kernel's identity map already lives in. a plain shallow copy would share that whole slot, private range included, across every process, so that one slot gets its own private second-level table too, seeded from the kernel's, with just the process's own range left blank for it to fill in.</span></span>
+      two processes calling <code>pt_create</code> genuinely do not share a page.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2> <!-- TODO: Break links -->
+      <ul>
+      <li><a href="../c0/index.html">c0</a></li>
+      <li><a href="../knekt/index.html">knekt</a></li>
+      <li><a href="../chrone/index.html">chrone</a></li>
+      <li><a href="../punkt/index.html">punkt</a></li>
+      <li><a href="../skalman/index.html">skalman</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · jit</title>
+<meta name="description" content="jit, the REPL's just-in-time compiler that walks the AST and emits raw x86-64 machine code.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>jit</h1>
+      <p class="article-meta">the REPL's just-in-time compiler</p>
+    </header>
+
+    <p>
+      the jit is a minimal x86-64 code generator that walks
+      <a class="int" href="../skalman/index.html">skalman</a>'s REPL
+      AST<span class="sn"><label class="sn-marker" for="sn-ast">†</label><input type="checkbox" id="sn-ast" class="sn-toggle"><span class="sidenote">the same ast nodes <code>repl_eval_node</code> interprets in c0.</span></span>
+      and emits raw machine code into an identity-mapped page. the generated code is
+      invoked through c0's indirect-call mechanism<span class="sn"><label class="sn-marker" for="sn-indirect">†</label><input type="checkbox" id="sn-indirect" class="sn-toggle"><span class="sidenote"><code>int fn = jit_page; return fn();</code>, c0's function-reference feature.</span></span>
+      and the return value in rax becomes the c0 return value. no coff, no page-table
+      changes. the kernel identity-maps the first 16 mb,
+      <a class="int" href="../jenna/index.html">jenna</a>'s <code>pmm_alloc_page</code>
+      returns addresses in that range, and every page is executable by default.
+    </p>
+
+    <h2 id="architecture">architecture</h2>
+
+    <h3>instruction encoder</h3>
+
+    <p>
+      eighteen functions that emit raw x86-64 bytes. <code>jit_emit(pos, byte)</code>
+      does a single <code>store8</code> into the jit page. everything else is built on
+      top of it, <code>mov eax, imm32</code>, <code>add/sub/imul rax, rbx</code>,
+      <code>cqo + idiv</code>, <code>cmp + setcc + movzx</code> for comparisons,
+      <code>push/pop</code> for register save and restore, <code>call rax</code> for
+      function calls into kernel helpers, <code>test + je/jmp</code> with rel32 offsets
+      for control flow. all immediates are byte-extracted via arithmetic (c0 has no
+      bitwise operators).
+    </p>
+
+    <p>
+      a helper <code>jit_byte(v, n)</code> extracts byte <code>n</code> from value
+      <code>v</code> using repeated division by 256. byte 7 overflows
+      (<code>256^7 × 256 = 2^64</code> wraps to 0 → divide-by-zero), so the function
+      short-circuits to 0 for all bytes 4 and above, since all kernel addresses are
+      identity-mapped and fit in 32 bits.
+    </p>
+
+    <h3>ast compiler</h3>
+
+    <p>
+      <code>jit_compile_node(nd, pos)</code> recursively walks the repl ast and emits
+      code for every supported node kind.
+    </p>
+
+    <ul>
+      <li><b>expressions:</b> literals, negations, arithmetic (add, sub, mul, div), six
+        comparisons (eq, ne, lt, le, gt, ge), variables (compile-time lookup from the
+        repl symbol table), string literals (embedded in the jit page's data area)</li>
+      <li><b>statements:</b> blocks, expression-statements, if/else, while, for, break,
+        continue, giving full control flow with label-based jumps and deferred patching</li>
+      <li><b>builtins:</b> <code>print()</code> (integer and string, via kernel helpers),
+        assignment (<code>x = expr</code>, also via a helper), <code>load8</code> and
+        <code>load64</code> (single-instruction inline), <code>store8</code> and
+        <code>store64</code> (two-argument inline)</li>
+    </ul>
+
+    <p>
+      right-first evaluation (<code>compile right → push rax → compile left → pop
+      rbx</code>) gives <code>rax=left, rbx=right</code> for all binary operators
+      with just two bytes of push/pop overhead per operation.
+    </p>
+
+    <h3>lifecycle</h3>
+
+    <p>
+      <code>jit_init</code> allocates one 4096-byte page. <code>jit_compile_and_run</code>
+      sets the page writable, compiles the ast, emits a final <code>ret</code>, removes
+      the writable bit, and calls the code. after execution, the writable bit is restored
+      for the next compilation. the page is never simultaneously writable and executable
+      (w^x via the writable bit).
+    </p>
+
+    <h2 id="shell">shell integration</h2>
+
+    <p>
+      <code>eval -c &lt;expr&gt;</code> in skalman routes through
+      <code>repl_eval_jit</code>, which does tokenize → parse → compile → execute. output is
+      prefixed <code>[jit]</code> (vs <code>[repl]</code> for the interpreter), both
+      for testability and to make the distinction visible. a full program with multiple
+      statements compiles natively. loops, variables, conditionals, and function calls
+      all work in a single pass.
+    </p>
+
+    <p>
+      compiled code can call back into c0 functions at runtime. kernel helpers live in
+      the elf at known addresses (auto-patched by <code>sync_addrs.sh</code> after every
+      rebuild). this is the current helper table.
+    </p>
+
+    <table>
+      <thead><tr><th>slot</th><th>function</th><th>purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>JIT_PRINT_ADDR</code></td><td><code>jit_print_helper(v)</code></td><td>print an integer + newline</td></tr>
+        <tr><td><code>JIT_PRINT_STR_ADDR</code></td><td><code>jit_print_str_helper(str)</code></td><td>print a string + newline (serial + screen)</td></tr>
+        <tr><td><code>JIT_ASSIGN_ADDR</code></td><td><code>jit_assign_helper(name, len, value)</code></td><td>create or update a repl variable</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="wx">w^x protection</h2>
+
+    <p>
+      efer.nxe is enabled at boot (bit 11 in the efer msr), so bit 63 in a page-table
+      entry controls executability. the jit page toggles between two modes.
+    </p>
+
+    <table>
+      <thead><tr><th>mode</th><th>pte</th><th>w</th><th>nx</th><th>effect</th></tr></thead>
+      <tbody>
+        <tr><td>compile</td><td><code>phys + 3 + NX</code></td><td>yes</td><td>yes</td><td>can write, cannot execute</td></tr>
+        <tr><td>execute</td><td><code>phys + 1</code></td><td>no</td><td>no</td><td>can execute, cannot write</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      <code>jit_set_writable(w)</code> walks the four-level identity-mapped page table,
+      clears the nx bit arithmetically (c0's truncate-toward-zero division gives wrong
+      results on negative pte values), and stores the new pte. no tlb flush, a write
+      to a pte invalidates any cached tlb entries for that virtual address on x86.
+    </p>
+
+  </article>
+</main>
+
+</body>
+</html>

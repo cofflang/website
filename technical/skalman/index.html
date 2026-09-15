@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · skalman</title>
+<meta name="description" content="skalman: the interactive shell of the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>skalman</h1>
+      <p class="article-meta">the interactive shell</p>
+    </header>
+
+    <p>
+      skalman is moonshot's command
+      line.<span class="sn"><label class="sn-marker" for="sn-skal">†</label><input type="checkbox" id="sn-skal" class="sn-toggle"><span class="sidenote">the name contains "skal", Swedish for shell.</span></span>
+      it reads a line of keystrokes, echoes them to the screen through
+      <a class="int" href="../punkt/index.html">punkt</a>, and on Enter runs the named command. its
+      line buffer was the kernel heap's first real customer, a single allocation from
+      <a class="int" href="../jenna/index.html">jenna</a>'s <code>kmalloc</code>.
+    </p>
+    <p>
+      since <a class="int" href="../kakel/index.html">kakel</a> arrived there is one shell
+      session per window, each with its own line buffer and its own prompt. keystrokes go
+      to the focused window's session, a half-typed command survives switching focus away
+      and back, and a command's output lands in the window it was typed
+      in.<span class="sn"><label class="sn-marker" for="sn-focus">†</label><input type="checkbox" id="sn-focus" class="sn-toggle"><span class="sidenote">focus cannot change in the middle of a command, the keystroke that runs it and the command itself happen inside one keyboard interrupt, and interrupts do not nest.</span></span>
+    </p>
+
+    <h2>where it runs</h2>
+    <p>
+      skalman is a scheduled task, one of <a class="int" href="../chrone/index.html">chrone</a>'s
+      own. the keyboard handler echoes each key to the screen through
+      <a class="int" href="../kakel/index.html">kakel</a>, then deposits the decoded
+      character into an input ring buffer and wakes the shell task. the shell task
+      blocks on an empty queue (the first use of <code>TASK_BLOCKED</code> and
+      <code>task_wake</code>) and when woken it dequeues one character at a time and
+      feeds it to <code>shell_input</code>.
+    </p>
+    <p>
+      for command history the keyboard handler detects up and down arrow keys and calls
+      into skalman's history ring buffer directly from the irq, clearing the current
+      line and redrawing the recalled command. this is safe because interrupt gates
+      keep the keyboard and timer handlers from nesting.
+    </p>
+    <p>
+      for line editing the left and right arrow keys move the cursor within the current
+      line. typing with the cursor mid-line inserts characters at that position
+      (shifting the rest right) and backspace deletes the character before the cursor
+      and shifts the remainder left. a quick line redraw fixes the visual state
+      after mid-line edits (the keyboard handler's echo path assumes append mode).
+      this covers the common case of fixing a typo without erasing the whole
+      command. home and end keys (or <kbd>ctrl-a</kbd> / <kbd>ctrl-e</kbd>) jump
+      to the start or end of the line. <kbd>ctrl-w</kbd> deletes the word before
+      the cursor and <kbd>ctrl-k</kbd> kills everything from the cursor to the end
+      of the line.
+    </p>
+
+    <h2>command reference</h2>
+    <p>
+      the command set grows when a piece of the kernel is worth poking at from the keyboard.
+      type <code>help</code> for the current list, or <code>help (command)</code> for details.
+      arguments are written in parentheses because that is how the shell itself writes them.
+    </p>
+    <dl class="commands">
+      <dt>help (command)</dt>
+      <dd>shows the full command list, or details about one command.</dd>
+      <dt>clear</dt>
+      <dd>clears the focused window.</dd>
+      <dt>chars</dt>
+      <dd>prints a grid of all printable ascii glyphs.</dd>
+      <dt>echo (text)</dt>
+      <dd>prints its argument back. <code>echo --file (path)</code> prints a file's contents.</dd>
+      <dt>list (path)</dt>
+      <dd>shows the contents of a directory, with sizes and permissions.</dd>
+      <dt>change (path)</dt>
+      <dd>changes the current working directory.</dd>
+      <dt>make (name)</dt>
+      <dd>creates an empty file (name with a dot) or directory.</dd>
+      <dt>remove (name)</dt>
+      <dd>deletes a file or empty directory.</dd>
+      <dt>write (name) (text)</dt>
+      <dd>writes text into a file, creating it if needed.</dd>
+      <dt>copy (src) (dst)</dt>
+      <dd>copies a file. both paths may contain slashes.</dd>
+      <dt>rename (src) (dst)</dt>
+      <dd>renames or moves a file or directory across directories.</dd>
+      <dt>count (file)</dt>
+      <dd>prints lines, words, and bytes in a file.</dd>
+      <dt>where</dt>
+      <dd>prints the current working directory path.</dd>
+      <dt>sync</dt>
+      <dd>persists all files to disk.</dd>
+      <dt>mode (path) (level)</dt>
+      <dd>sets file permissions to <code>public</code>, <code>private</code>, or <code>locked</code>.</dd>
+      <dt>own (path) (user)</dt>
+      <dd>changes a file's owner.</dd>
+      <dt>whoami</dt>
+      <dd>prints the current user name.</dd>
+      <dt>login (name)</dt>
+      <dd>switches user for this session, with optional password.</dd>
+      <dt>passwd (user) (password)</dt>
+      <dd>sets or changes a user's password.</dd>
+      <dt>adduser (name)</dt>
+      <dd>creates a new user. the user table is fixed-size.</dd>
+      <dt>eval (expr)</dt>
+      <dd>evaluates a c0 expression through the repl. <code>eval -c</code> uses the jit compiler.</dd>
+      <dt>run (file)</dt>
+      <dd>executes a file line-by-line through the repl interpreter.</dd>
+      <dt>edit (file)</dt>
+      <dd>opens a file in the <a class="int" href="../skrift/index.html">skrift</a> text editor.</dd>
+      <dt>tasks</dt>
+      <dd>lists every task in the scheduler table.</dd>
+      <dt>spawn</dt>
+      <dd>starts a new worker task.</dd>
+      <dt>kill (id)</dt>
+      <dd>terminates a task by its id.</dd>
+      <dt>run3 / spawn3</dt>
+      <dd>drops to ring 3 and runs a test binary. <code>run3</code> does it in the
+      current task (the shell is lost when the process exits). <code>spawn3</code>
+      creates a new task with its own
+      <a class="int" href="../kakel/index.html">kakel</a> window.
+      <code>spawn3 (file)</code> loads and runs a real ELF64 executable from
+      <a class="int" href="../jakel/index.html">jakel</a> and <code>run3 (file)</code>
+      does the same in the current task.</dd>
+      <dt>split</dt>
+      <dd>adds a new window to the grid. the new window inherits the current
+      session's authenticated user and working directory, the login prompt is
+      skipped.</dd>
+      <dt>close</dt>
+      <dd>removes the focused window. closing a
+      <a class="int" href="../kakel/index.html">tavla</a> also stops the graphical program
+      behind it, since the window is the only place it had to draw. <code>alt+w</code> does
+      the same from the keyboard, and is the way out of a tavla that is holding every
+      keystroke.</dd>
+    </dl>
+    <p>
+      anything else prints <code>unknown command:</code> followed by what was typed. an
+      empty line just prompts again. while typing, backspace erases, and
+      a line is capped at 127 characters.
+    </p>
+
+    <h2>tab completion</h2>
+    <p>
+      press tab to complete commands and filenames. the shell looks at the word before
+      the cursor. if it is the first word on the line, it completes against the
+      builtin command names. if it is a later word (after a space), it completes against
+      filenames in the current working directory through
+      <a class="int" href="../jakel/index.html">jakel</a>.
+    </p>
+    <p>
+      a single match completes the word fully, with a trailing space for commands so you
+      can type the next argument immediately. multiple matches complete the longest common
+      prefix. if the common prefix is already fully expanded and there are still multiple
+      candidates, pressing tab a second time lists them all below the prompt, the same
+      behaviour as a modern shell.
+    </p>
+
+    <h2>quoting</h2>
+    <p>
+      arguments can be wrapped in double quotes to include spaces.
+      <code>write "my file.txt" hello world</code> writes "hello world" to a file named
+      "my file.txt". the <code>shell_next_arg</code> helper handles both quoted and
+      unquoted arguments, available to all builtins.
+    </p>
+
+    <h2>repl</h2>
+    <p>
+      the <code>eval (expr)</code> builtin parses and evaluates c0 statements at runtime
+      via a recursive tree-walking interpreter. it supports integer literals (decimal and
+      hex), arithmetic with correct precedence, comparisons, unary minus, session-persistent
+      variables, and a <code>print(expr)</code> builtin. control flow covers
+      <code>if</code>/<code>else</code>, <code>while</code>, <code>for</code> loops (all
+      three parts optional), <code>break</code> and <code>continue</code>, and
+      <code>{ }</code> blocks with semicolon-separated statements.
+    </p>
+    <p>
+      <code>eval -c (expr)</code> compiles and runs c0 natively via the jit compiler in
+      <code>jit.c0</code>. it walks the same ast the interpreter uses, emits raw x86-64
+      machine code into an identity-mapped page, and invokes it through c0's indirect-call
+      mechanism. the compiled code runs with full W^X page protection, the page is writable
+      during compilation and executable during execution, never both.
+    </p>
+    <p>
+      the jit now handles the full statement set, meaning arithmetic and comparisons,
+      <code>if</code>/<code>else</code>, <code>while</code> and <code>for</code> loops
+      with <code>break</code> and <code>continue</code>, <code>{ }</code> blocks,
+      variable assignment, <code>print()</code> with both string and integer arguments,
+      and builtin calls like <code>load8(addr)</code>, <code>load64(addr)</code>,
+      <code>store8(addr, val)</code>, and <code>store64(addr, val)</code>. string
+      literals are embedded directly in the code page. multi-statement programs
+      compile and run as a single native invocation. type <code>help eval</code>
+      for details.
+    </p>
+    <p>
+      <code>run (file)</code> reads a file from
+      <a class="int" href="../jakel/index.html">jakel</a> and executes it line-by-line
+      through the repl interpreter -- the first batch-execution primitive. on first boot a
+      small <code>demo.c0</code> is seeded in jakel, type <code>run demo.c0</code> to try it.
+    </p>
+
+    <h2>editor</h2>
+    <p>
+      the <code>edit (filename)</code> builtin opens the named file in
+      <a class="int" href="../skrift/index.html">skrift</a>, the text editor. the
+      editor takes over the window -- typing edits the buffer, escape enters command
+      mode, arrow keys move the cursor, <code>q</code> quits and saves. the file is read
+      from and written to <a class="int" href="../jakel/index.html">jakel</a>.
+      saving does not sync to disk, run <code>sync</code> after quitting to persist.
+      type <code>help edit</code> for details.
+    </p>
+
+    <h2>users and permissions</h2>
+    <p>
+      skalman has a simple multi-user system. <code>adduser (name)</code> creates a new
+      user in a fixed-size table. <code>login (name) [password]</code> switches the current
+      session to that user. <code>whoami</code> prints the current user name. root
+      (uid 0) and guest (uid 1) are seeded at boot.
+    </p>
+    <p>
+      <code>passwd (user) (password)</code> sets a plaintext password for a user.
+      once a password is set, <code>login (name)</code> requires it. the session
+      stays as the current user if the password is wrong. passwords are stored as
+      copies allocated with <code>kmalloc</code> on the kernel heap.
+    </p>
+    <p>
+      file ownership and permissions are managed through
+      <a class="int" href="../jakel/index.html">jakel</a>.
+      <code>own (path) (user)</code> changes a file's owner.
+      <code>mode (path) public|private|locked</code> sets the permission level.
+    </p>
+
+    <h2>path-aware copy and rename</h2>
+    <p>
+      <code>copy (src) (dst)</code> and <code>rename (src) (dst)</code> both support
+      destination paths with slashes. <code>copy readme.txt docs/readme.txt</code>
+      copies into the <code>docs</code> directory (which must already exist).
+      <code>rename old.txt archive/old.txt</code> moves a file across directories
+      by reparenting the node, the file keeps its data and only its name and
+      parent pointer change.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+        <li><a href="../knekt/index.html">knekt</a></li>
+        <li><a href="../jenna/index.html">jenna</a></li>
+	<li><a href="../chrone/index.html">chrone</a></li> <!-- TODO: Break link -->
+        <li><a href="../punkt/index.html">punkt</a></li>
+        <li><a href="../kakel/index.html">kakel</a></li>
+        <li><span class="wip" title="documentation not yet published">raket</span></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

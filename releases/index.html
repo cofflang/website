@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>moonshot · releases</title>
-<meta name="description" content="bootable images of moonshot and the source that built them, when there are any.">
+<meta name="description" content="bootable images of moonshot and the source that built them.">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -28,23 +28,51 @@
       <p class="article-meta">bootable images and source code</p>
     </header>
 
-    <h2>latest</h2>
-    <p class="empty">
-      no bootable images yet. when the first version of moonshot lands it will be
-      listed here. until then, the <a href="../blog/index.html">blog</a> is the place
-      to watch the work happen.
+    <h2>0.1.0 &ldquo;quiet boye&rdquo;</h2>
+    <p class="article-meta"><time datetime="2026-08-03">2026-08-03</time></p>
+
+    <p>
+      the first release of moonshot. it boots via Multiboot + GRUB in QEMU, has
+      preemptive multitasking with a round-robin scheduler, its own pixel
+      framebuffer and font renderer, a tiled windowing layer, an interactive
+      shell with tab completion and command history, a built-in text editor with
+      syntax highlighting and visual selection, a c0 REPL with a JIT compiler, a
+      disk-backed filesystem with permissions, and ring-3 userspace with syscall
+      support.
     </p>
+
+    <p>
+      <a href="https://github.com/cofflang/moonshot">github.com/cofflang/moonshot</a>
+    </p>
+
+    <h3>boot the pre-built image</h3>
+
+    <p>
+      the repository includes a pre-built <code>moonshot.iso</code> you can boot
+      right away. you need <code>qemu-system-x86_64</code> installed:
+    </p>
+
+    <pre># create a disk image for the filesystem
+dd if=/dev/zero of=disk.img bs=512 count=20480
+
+# headless (serial console only)
+qemu-system-x86_64 -cdrom moonshot.iso -display none -no-reboot \
+  -serial file:serial.log -m 128 \
+  -drive file=disk.img,format=raw,if=ide,index=0,media=disk
+
+# interactive graphical window (needs qemu-ui-gtk on Arch)
+qemu-system-x86_64 -cdrom moonshot.iso -display gtk -m 128 \
+  -drive file=disk.img,format=raw,if=ide,index=0,media=disk</pre>
 
     <div class="rule" role="separator" aria-hidden="true"></div>
 
     <h2>source</h2>
     <p>
+      moonshot lives at
+      <a href="https://github.com/cofflang/moonshot">github.com/cofflang/moonshot</a>.
       <a class="int" href="../technical/coff/index.html">coff</a>, the self-hosted
-      compiler for <a class="int" href="../technical/c0/index.html">c0</a>, is now
-      public and it lives at
-      <a href="https://github.com/cofflang/coff">github.com/cofflang/coff</a>. moonshot
-      itself gets its own repository with its first release, that will probably take
-      some time.
+      compiler for <a class="int" href="../technical/c0/index.html">c0</a>, is at
+      <a href="https://github.com/cofflang/coff">github.com/cofflang/coff</a>.
     </p>
 
   </article>

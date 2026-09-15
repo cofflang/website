@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · kakel</title>
+<meta name="description" content="kakel: the tiled windowing layer of the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>kakel</h1>
+      <p class="article-meta">the windowing layer</p>
+    </header>
+
+    <p>
+      kakel puts more than one thing on the screen at
+      once.<span class="sn"><label class="sn-marker" for="sn-kakel">†</label><input type="checkbox" id="sn-kakel" class="sn-toggle"><span class="sidenote">the name is Swedish for "tile", matching exactly what it does.</span></span>
+      it divides <a class="int" href="../punkt/index.html">punkt</a>'s single full-screen console
+      into a tiled grid of rectangular windows (up to four visible at once, with the
+      architecture supporting more in hidden rings), each with its own shell session.
+    </p>
+
+    <h2>layout</h2>
+    <p>
+      boot starts with one full-screen window above a one-row status bar. the
+      <code>split</code> command divides the screen step by step. a first split creates two
+      side-by-side windows, a second split adds a second row, and a third fills the final
+      slot for a 2×2 grid. the status bar is always present and full-width at the very
+      bottom, showing uptime, task count, and free memory. <code>close</code> removes the
+      focused window and collapses the layout back down, with a message if you try to close
+      the last one.
+    </p>
+
+    <h2>representation</h2>
+    <p>
+      a window is a set of entries in parallel arrays indexed by a window id, the same
+      idiom <a class="int" href="../chrone/index.html">chrone</a> uses for its task table <!-- TODO: Break link -->
+      and <a class="int" href="../jakel/index.html">jakel</a> uses for its <!-- TODO: Break link -->
+      nodes, since <a class="int" href="../c0/index.html">c0</a> has no structs.<!-- TODO: Break link -->
+      <span class="sn"><label class="sn-marker" for="sn-cells">†</label><input type="checkbox" id="sn-cells" class="sn-toggle"><span class="sidenote">geometry is stored in character cells, not pixels. every window is cell-aligned, which keeps the scroll's eight-byte row copies legal and lets the cursor code reuse punkt's cell-based drawing directly.</span></span>
+      each window records where it sits, how big it is, where its cursor is, and its own
+      background colour. new windows cycle through a palette of six dark backgrounds so
+      adjacent tiles are visually distinct without borders.
+    </p>
+
+    <h2>clipping</h2>
+    <p>
+      punkt's console wraps text at the screen edge and scrolls the whole screen. kakel
+      does the same things per window. a line wraps at the window's right edge, and text
+      running off the window's bottom scrolls that window alone, shifting only the pixel
+      rows inside its own rectangle and leaving every neighbouring pixel exactly where it
+      was.
+    </p>
+
+    <h2>focus</h2>
+    <p>
+      keyboard input goes to whichever window has focus. Alt+Tab cycles focus through
+      occupied slots in reading order (left to right, top to bottom) and wraps
+      around.<span class="sn"><label class="sn-marker" for="sn-swallow">†</label><input type="checkbox" id="sn-swallow" class="sn-toggle"><span class="sidenote">the Tab is swallowed whole, a focus switch never types anything into the window it lands in.</span></span>
+      the cursor shows where focus is, bright in the focused window and dim everywhere else.
+    </p>
+    <p>
+      a cursor is a fine focus indicator right up until a window has no cursor. a graphical
+      program draws pixels, not text, so it never places one, and for a while a tavla and a
+      shell window could sit side by side looking equally focused with nothing on screen
+      saying which one the keyboard was talking to. a tavla shows focus in its title strip
+      instead, for exactly this reason.
+    </p>
+
+    <h2>one shell per window</h2>
+    <p>
+      each window boots into its own <a class="int" href="../skalman/index.html">skalman</a> <!-- TODO: Break link -->
+      session with its own line buffer. a half-typed command survives switching away and
+      back, and a command's output lands in the window it was typed in. the shell prompt
+      cannot be erased by backspacing past it.
+    </p>
+
+    <h2>ring-3 processes</h2>
+    <p>
+      when a ring-3 process is spawned via <code>spawn3</code> or
+      <code>spawn3 (file)</code>, kakel gives it its own window. the process's output, every
+      byte it writes through <code>SYS_DEBUG_PRINT</code>, lands in that window regardless
+      of which tile the user is focused on. this is what lets a ring-3 program run visibly
+      alongside the shell. the shell stays in its original window, the process gets the new
+      one, and Alt+Tab cycles between them as usual.
+    </p>
+    <p>
+      if the windowing layer is not active, a VGA-only boot for instance, the spawn still
+      works, the output simply goes to the full-screen console instead, same as it always
+      has.
+    </p>
+
+    <h2>tavla</h2>
+    <p>
+      a window is one of two kinds. the default is a shell window, a text console skalman
+      owns and prompts into. the other is a <strong>tavla</strong>, the window a graphical
+      ring-3 program gets. it is still an ordinary tile with the same geometry rules and the same Alt+Tab
+      order, shown alongside the shell rather than taking over the screen. that is
+      by design, and it is the reason a tavla is not a fullscreen mode, because a graphical program
+      being able to talk to the shell is wanted later, and sealing the screen off would
+      foreclose it.
+    </p>
+    <p>
+      a tavla carries a one-row title strip that kakel owns and the program cannot draw
+      over. the strip names the program, renders bright when the window has focus and dim
+      when it does not, and offers the way out, <code>alt+w</code> closes the focused tavla
+      and stops the program behind it.
+    </p>
+
+    <figure class="shot">
+      <img src="../../media/tavla-focused.png" width="512" height="384"
+           alt="two tiled windows: a shell prompt on the left, and on the right a tavla with a bright blue title strip reading 'gnista.elf' on the left and 'alt+w close' on the right, above a dark blue client area with a sprite in it.">
+      <figcaption>a focused tavla running gnista's demo, beside a shell session.</figcaption>
+    </figure>
+
+    <p>
+      the strip costs the program one character row, and the interesting part is where that
+      subtraction happens. a tavla's stored rectangle <em>is</em> its client area, inset
+      below the strip by the one function that hands out geometry. so every path that was
+      already correct stays correct without knowing a strip exists. text output, per-window
+      scrolling and all three of the ring-3 graphics calls keep using the same window
+      rectangle they always did, and no program can address a pixel of its own title.
+    </p>
+    <p>
+      keys are the other difference. while a tavla has focus, every keystroke goes to its
+      program through the key ring buffer and neither the shell nor the editor sees it,
+      which is the point, but also a trap worth naming. <code>alt+w</code> and Alt+Tab are
+      checked before that routing and can never be swallowed, so a tavla can always be left
+      or closed no matter what the program does with input. a tavla whose program has
+      exited stops consuming keys entirely, but the window stays, showing the last frame it
+      drew, with the strip relabelled until it is closed.
+    </p>
+
+    <h2>exception</h2>
+    <p>
+      a kernel panic ignores the windows entirely and takes over the full display,
+      because a fatal error should never be confined to a tile.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul> <!-- TODO: Break links -->
+        <li><a href="../c0/index.html">c0</a></li>
+        <li><a href="../knekt/index.html">knekt</a></li>
+        <li><a href="../jenna/index.html">jenna</a></li>
+        <li><a href="../chrone/index.html">chrone</a></li>
+        <li><a href="../punkt/index.html">punkt</a></li>
+        <li><a href="../skalman/index.html">skalman</a></li>
+        <li><a href="../jakel/index.html">jakel</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

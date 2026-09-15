@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>moonshot · chrone</title>
+<meta name="description" content="chrone: scheduling and timing in the moonshot operating system.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body class="page-article">
+
+<header class="site-head sub">
+  <a class="brand" href="../../index.html"><span class="mark" aria-hidden="true"></span> moonshot</a>
+  <nav class="cats" aria-label="categories">
+    <a href="../../technical/index.html" class="here" aria-current="page">technical</a>
+    <a href="../../blog/index.html">blog</a>
+    <a href="../../releases/index.html">releases</a>
+    <a href="../../about/index.html">about</a>
+    <a href="../../meta/index.html">meta</a>
+  </nav>
+</header>
+
+<main>
+  <article class="article">
+    <header class="article-head">
+      <p class="crumb"><a href="../index.html">technical</a></p>
+      <h1>chrone</h1>
+      <p class="article-meta">scheduling and timing</p>
+    </header>
+
+    <p>
+      chrone is a preemptive, round-robin scheduler. tasks do not yield, the timer takes
+      the CPU from them. a programmable interval timer fires on a fixed period, every tick
+      lands in the kernel's interrupt path, and every few ticks chrone switches which task
+      the CPU returns to.
+    </p>
+    <p>
+      round-robin is the simplest fair rule there is. the runnable tasks form a ring, and
+      the CPU is handed to each in turn, one after the next, wrapping back to the first
+      once the last has had its slice. no task is favoured over another and none can hold
+      the CPU longer than its turn, because the turn ends whether the task is finished or
+      not, the timer sees to that.
+    </p>
+
+    <h2>the task table</h2>
+    <p>
+      tasks live in a fixed-size table, allocated from the kernel
+      heap when the scheduler starts. <a class="int" href="../c0/index.html">c0</a> has no structs, so the table is a set of parallel
+      arrays indexed by task id, the task's saved stack pointer, its state (free, runnable,
+      or exited), how many times it has been scheduled, a counter the task itself
+      increments as it works, the root of its page table (a ring-3 process gets its own,
+      kernel tasks share the identity map), and, for ring-3 processes spawned with a
+      dedicated <a class="int" href="../kakel/index.html">kakel</a> window, the id of that <!-- TODO: Break link -->
+      window.<span class="sn"><label class="sn-marker" for="sn-parallel">†</label><input type="checkbox" id="sn-parallel" class="sn-toggle"><span class="sidenote">the same parallel-array idiom recurs everywhere in the kernel that a richer language would use a struct.</span></span>
+    </p>
+
+    <h2>how a switch happens</h2>
+    <p>
+      the switch mechanism leans entirely on how x86_64 handles interrupts. when the timer
+      fires, the CPU pushes the interrupted task's full return frame onto that task's own
+      stack, and the kernel's interrupt entry pushes the rest of the registers after it.
+      to switch tasks, chrone only has to remember where that stack pointer ended up, pick
+      the next runnable slot in the table (wrapping around, skipping exited tasks), and
+      hand the interrupt-return instruction the saved stack pointer of the chosen task
+      instead. the same return path serves a brand-new task too, spawning crafts a
+      hand-built frame on a fresh stack page that looks exactly as if the task had already
+      been interrupted
+      once.<span class="sn"><label class="sn-marker" for="sn-frame">†</label><input type="checkbox" id="sn-frame" class="sn-toggle"><span class="sidenote">one restore path for both first launch and every later resume. there is no special case, which is much of why the mechanism is trustworthy.</span></span>
+    </p>
+
+    <h2>spawn, exit, kill</h2>
+    <p>
+      <code>task_spawn</code> takes an entry function, claims the next free slot, gives it
+      one page of stack, and marks it runnable. it is called at boot for the first tasks
+      and at runtime by the shell,
+      <a class="int" href="../skalman/index.html">skalman</a>. a task ends one of two ways.
+      <code>task_exit</code> marks its own slot exited and parks until the next tick
+      carries the CPU away for good, and <code>kill</code> marks someone else's slot
+      exited, no cooperation from the target needed, the scheduler simply never picks it
+      again.
+    </p>
+
+    <h2>the reaper</h2>
+    <p>
+      an exited task cannot free its own stack, it is standing on it. so at the top of
+      every tick a reaper runs in whichever task is current, and returns the stack pages of
+      exited tasks (other than the current one) to
+      <a class="int" href="../jenna/index.html">jenna</a>'s page allocator. spawn, run, exit or kill,
+      reap, reuse. the full lifecycle of a task's memory is closed, and the same physical
+      page has been watched cycling through it.
+    </p>
+
+    <h2>the quantum</h2>
+    <p>
+      a task runs for one timer tick, about ten milliseconds, before it is
+      switched out. the quantum is that short because of what a longer one
+      does to anything that moves on screen. with four runnable tasks and a
+      quantum of a tenth of a second, every task runs for a tenth of a second
+      and then sits frozen for three tenths, so a program's frames arrive in a
+      burst about ten milliseconds apart followed by a gap of three hundred
+      milliseconds with nothing at all in between. on screen that is a sprite
+      that sweeps forward and then stalls, over and over, and no amount of
+      tuning inside the program can repair it, because nothing can be drawn
+      during the three tenths of a second it is not running.
+    </p>
+    <p>
+      the frame rate does not depend on the quantum at all. a task gets one
+      tick in every four when there are four of them, whatever the quantum,
+      so the program draws about twenty-five frames a second either way. only
+      the spacing changes. at one tick per turn the same twenty-five frames
+      are handed out evenly, forty milliseconds apart, instead of arriving in
+      a clump and then nothing. the cost of switching that often is one pick
+      and one stack-pointer swap per tick, which at a hundred hertz is not
+      worth measuring. the one genuinely expensive thing that rides a timer,
+      the status bar, a full-width fill and forty-odd glyphs, keeps its own
+      slower counter.
+    </p>
+
+    <nav class="related" aria-label="related documentation">
+      <h2>related</h2>
+      <ul>
+      <li><a href="../c0/index.html">c0</a></li>
+      <li><a href="../coff/index.html">coff</a></li>
+      <li><a href="../knekt/index.html">knekt</a></li>
+      <li><a href="../jenna/index.html">jenna</a></li>
+      <li><a href="../punkt/index.html">punkt</a></li>
+      <li><a href="../skalman/index.html">skalman</a></li>
+      </ul>
+    </nav>
+
+  </article>
+</main>
+
+<footer class="site-foot">
+  <hr class="foot-rule">
+  <span class="mark foot-logo" aria-hidden="true"></span>
+  <hr class="foot-rule">
+</footer>
+
+</body>
+</html>

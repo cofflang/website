@@ -41,7 +41,7 @@
       untangle, and somewhere in that mess the motivation went out of
       it.<span class="sn"><label class="sn-marker" for="sn-old">†</label><input type="checkbox" id="sn-old" class="sn-toggle"><span class="sidenote">not a single line of that code was re-used in this project.</span></span>
       what the failure taught me is that i did not want to patch a wobbly foundation, i
-      wanted to build something robust from the beginning, and in the right order this
+      wanted to build something solid from the beginning, and in the right order this
       time.
     </p>
 
@@ -58,7 +58,7 @@
     <h2>first light</h2>
     <p>
       the kernel's Multiboot header asks GRUB for a 1024×768 graphics mode,
-      <span class="wip" title="documentation not yet published">punkt</span> maps
+      <a class="int" href="../../technical/punkt/index.html">punkt</a> maps
       the framebuffer the bootloader hands back, and the font renderer paints
       moonshot's own characters into it, pixel by pixel. and then it was simply there,
       <strong>MOONSHOT</strong>, drawn by my kernel, in my font, compiled by my compiler.
@@ -76,8 +76,8 @@
       real graphical system, the next step in that direction is something that can hold
       more than one thing on the screen at once, the beginning of a windowing layer.
       underneath it, the kernel already runs more than one task at a time through
-      <span class="wip" title="documentation not yet published">chrone</span>, and the shell,
-      <span class="wip" title="documentation not yet published">skalman</span>, can start and stop them.
+      <a class="int" href="../../technical/chrone/index.html">chrone</a>, and the shell,
+      <a class="int" href="../../technical/skalman/index.html">skalman</a>, can start and stop them.
     </p>
 
   </article>

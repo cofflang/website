@@ -36,17 +36,18 @@
 
     <h2>one type</h2>
     <p>
-      c0 has a single value type: <code>int</code>, a 64-bit signed
+      c0 has a single value type, <code>int</code>, a 64-bit signed
       integer.<span class="sn"><label class="sn-marker" for="sn-onetype">†</label><input type="checkbox" id="sn-onetype" class="sn-toggle"><span class="sidenote">there is no unsigned type and no array type. a consequence worth knowing is that division is signed and truncating, so packed bit patterns are kept below 32 bits where the sign bit cannot interfere.</span></span>
-      everything is an <code>int</code>: numbers, characters, truth values and addresses.
+      numbers, characters, truth values and addresses are all an <code>int</code>.
       memory is handled through an address value, and the builtins below read and write through it.
     </p>
 
     <h2>the shape of a program</h2>
     <p>
-      the syntax is a small, familiar subset of C. functions (up to six parameters, with
+      the syntax is a small, familiar subset of C. functions (up to sixteen parameters, the
+      first six in registers, the rest on the stack, with
       recursion), global and local variables, <code>if</code>/<code>else</code>,
-      <code>while</code>, the usual arithmetic and comparison operators, character
+      <code>while</code>, <code>for</code>, the usual arithmetic and comparison operators, character
       literals with escapes, string literals, and <code>//</code> comments. a program
       starts at <code>main</code>. source can be split across files with the
       <code>include</code> directive, which <a class="int" href="../coff/index.html">coff</a> resolves
@@ -64,6 +65,47 @@ int main() {
     }
     return sum;
 }</code></pre>
+
+    <h2>naming memory instead of counting it</h2>
+    <p>
+      c0 has no structs, but it has <code>layout</code>. a
+      <code>layout</code> declaration does not introduce a new value type. it
+      just gives names to a run of 8-byte offsets, so code that would
+      otherwise be <code>store64(e + 16, v)</code> can read <code>e.vx = v</code>
+      instead. everything is still an <code>int</code> and a <code>layout</code>
+      is a naming convention over the load/store builtins, not a second type
+      system next to them.
+    </p>
+    <pre><code>layout Entity {
+    int x;
+    int y;
+    int vx;
+    int vy;
+}
+
+int main() {
+    int e;
+    e = alloc(sizeof(Entity));
+    e.x = 10;
+    e.vx = 1;
+    return e.x + e.vx;
+}</code></pre>
+    <p>
+      <code>sizeof(Name)</code> resolves at compile time to that layout's
+      field count times 8. the result is a plain integer, usable anywhere one is, most
+      often right inside <code>alloc(...)</code>.
+    </p>
+    <p>
+      field names live in one flat table shared by every <code>layout</code>
+      in the program, not one scoped per layout. c0 has no type system, so
+      <code>e.x</code> cannot be checked against "the layout <code>e</code>
+      was allocated as." the first layout to declare a field name fixes its
+      offset and any other layout reusing that name must declare it at the same
+      position, otherwise it is a compile error. two layouts can each have their own
+      <code>x</code> and <code>y</code> as long as both agree <code>x</code>
+      comes first. this is the same "trust the programmer, one flat namespace"
+      spirit as c0's single function/global namespace.
+    </p>
 
     <h2>builtins instead of a standard library</h2>
     <p>
@@ -92,11 +134,11 @@ int main() {
       <dt>types</dt>
       <dd><code>int</code> only, a 64-bit signed integer, which also stands in for characters, truth values and addresses.</dd>
       <dt>keywords</dt>
-      <dd><code>int</code>, <code>if</code>, <code>else</code>, <code>while</code>, <code>return</code>, <code>break</code>, <code>continue</code>.</dd>
+      <dd><code>int</code>, <code>extern</code>, <code>if</code>, <code>else</code>, <code>while</code>, <code>for</code>, <code>return</code>, <code>break</code>, <code>continue</code>, <code>layout</code>, <code>sizeof</code>.</dd>
       <dt>directives</dt>
       <dd><code>include "file.c0";</code> splices another source file in as text, resolved by <a class="int" href="../coff/index.html">coff</a> before compilation.</dd>
       <dt>structure</dt>
-      <dd>functions of up to six parameters (recursion allowed), global and local variables, and <code>main</code> as the entry point.</dd>
+      <dd>functions of up to sixteen parameters (recursion allowed), global and local variables, <code>layout</code> declarations (named offsets, not a real aggregate type, see above), and <code>main</code> as the entry point.</dd>
       <dt>operators</dt>
       <dd>the arithmetic <code>+ - * /</code>, the comparisons <code>== != &lt; &lt;= &gt; &gt;=</code>, and <code>=</code> for assignment.</dd>
       <dt>literals</dt>
@@ -120,7 +162,7 @@ int main() {
       <h2>related</h2>
       <ul>
         <li><a href="../coff/index.html">coff</a></li>
-        <li><span class="wip" title="documentation not yet published">knekt</span></li>
+        <li><a href="../knekt/index.html">knekt</a></li>
       </ul>
     </nav>
 
